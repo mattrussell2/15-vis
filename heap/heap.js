@@ -233,6 +233,7 @@ async function toggleNodes(nodeList, onTime=5000*algoSpeed, offTime=500*algoSpee
     
     await new Promise((resolve) => setTimeout(resolve, offTime));
 }
+var tween;
 
 async function compare(nodes) {
     let y;
@@ -248,11 +249,12 @@ async function compare(nodes) {
     toAdd.name = 'bboxNode1';
     battleBox.add( toAdd );
    
-    new TWEEN.Tween(toAdd.position).to( { x: -100 }, 500)
+    tween = new TWEEN.Tween(toAdd.position).to( { x: [-50, -100, -200], y: 75 }, 500)
                                     .yoyo(true)
                                     .repeat(Infinity)
                                     .easing(TWEEN.Easing.Cubic.InOut)
                                     .start();
+    tween.interpolation(TWEEN.Interpolation.Bezier)
     
     await toggleNodes( [ nodes[0] ] );
 
