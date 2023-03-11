@@ -10,11 +10,15 @@ import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 const font = new FontLoader().parse( fontData );
 const frustumSize = 250;
 const aspect = window.innerWidth / window.innerHeight;
-const camera = new THREE.OrthographicCamera( frustumSize * aspect / - 2, frustumSize * aspect / 2, 
-                                             frustumSize / 2, frustumSize / - 2, 1, 1000 );
+const camera = new THREE.OrthographicCamera( frustumSize * aspect / - 2, 
+                                             frustumSize * aspect / 2, 
+                                             frustumSize / 2, 
+                                             frustumSize / - 2, 1, 1000 );
 camera.position.z = 50;
 const scene = new THREE.Scene();
-const light = new THREE.AmbientLight( 0xffffff);
+scene.background = new THREE.Color( 0xf0f0f0 );
+
+const light = new THREE.AmbientLight( 0xffffff );
 scene.add( light );
 
 // Set up the renderer
@@ -32,149 +36,219 @@ const colors = {
     'warm': d3.interpolateWarm,
     'cool': d3.interpolateCool,
     'rainbow': d3.interpolateRainbow
-   }
-var colorFormat = 'viridis'; 
+}
+var colorFormat = 'viridis';
+
+// params for tree and array node positions
+const treeXStart = 0;
+const treeYStart = 100;
+const aryY = -100;
+const aryWidth = frustumSize * aspect * .9; 
+const textDeltaZ = 5; // shift text forward so visible
+const boxZ = 0;       // z location of the boxes
 
 // modifable params - levels, number of elements, and colors / level in the heap, boxDim - size of x,y,z for box..
 var numLevels = 4;
 var heapSize = Math.pow(2, numLevels) - 1;
-var levelColors = Array(numLevels).fill(0).map((_, i) => colors[colorFormat](i / numLevels));
-var boxDim = 15;
-
-// params for tree and array node positions
-const treeXStart = 0;
-const treeYStart = 75;
-const aryY = -100;
-const aryWidth = frustumSize * aspect * .9; 
-const aryDeltaX = aryWidth / heapSize;
-const aryXStart = -aryWidth / 2 + aryDeltaX / 2;
-const textDeltaZ = 5; // shift text forward so visible
-const boxZ = 0; // z location of the boxes
+var levelColors = Array(numLevels).fill(0).map((_, i) => colors[colorFormat]((i + 1) / numLevels));
+var boxDim = 16;
+var txtLineColor = 0xffffff;
+var aryDeltaX = aryWidth / ( heapSize + 1 );
+var aryXStart = -aryWidth / 2 + aryDeltaX / 2;
+var textSize = 8;
+var textHeight = 5; 
+var algoSpeed = 0.5;
 
 // Define a function to create a single node
-function createNode(x, y, z, color) {
+function createNode(num, x, y, z, color) {
     const geometry = new THREE.BoxGeometry(boxDim, boxDim, boxDim);
-    const material = new THREE.MeshBasicMaterial({ color: color, 
-                                                   opacity: 0.9, 
-                                                   transparent: true,
-                                                   polygonOffset: true,
-                                                   polygonOffsetFactor: 1, // positive value pushes polygon further away
-                                                   polygonOffsetUnits: 1 } );
+    const material = new THREE.MeshStandardMaterial({   
+                                                        color: color, 
+                                                        opacity: 1, 
+                                                        transparent: false,
+                                                        polygonOffset: true,
+                                                        polygonOffsetFactor: 1, // positive value pushes polygon further away
+                                                        polygonOffsetUnits: 1, 
+                                                        roughness: 0.2, metalness: 0.3,
+                                                    });
+
     const node = new THREE.Mesh( geometry, material );
     node.position.set(x, y, z);
 
-    // selector box for the node
+    // selector box for the node - hide at first
     const offset = boxDim / 2;
     const zPos = boxZ + 5;
-    const positions = [ -offset, offset, zPos,  // left top
-                        offset, offset, zPos,   // right top
-                        offset, -offset, zPos,  // right bottom
-                        -offset, -offset, zPos, // left bottom
-                        -offset, offset, zPos ]; 
+    const positions = [ -offset,  offset, zPos,   // left top
+                         offset,  offset, zPos,   // right top
+                         offset, -offset, zPos,   // right bottom
+                        -offset, -offset, zPos,   // left bottom
+                        -offset,  offset, zPos ]; 
     
-    const geo = new LineGeometry();
-    geo.setPositions( positions );
-    geo.setColors([212, 72, 66]);
+    const lineGeo = new LineGeometry();
+    lineGeo.setPositions( positions );
 
-    const mat = new LineMaterial( { color: 0xd44842, linewidth: 0.005 } ); // not sure why so small, but it works.
-    const line = new Line2( geo, mat );
-    line.visible = false;
+    const lineMat = new LineMaterial( { color: 0xd44842, linewidth: 0.005 } ); // not sure why so small, but it works.
+    const lineMesh = new Line2( lineGeo, lineMat );
+    lineMesh.visible = false;
 
-    node.add( line );
+    node.add( lineMesh );
+
+    // make text
+    let nstr = num.toString();
+    if (num < 10) nstr = '0' + nstr; // pad with 0
+
+    const textGeo = new TextGeometry( nstr, {
+                                                font: font,
+                                                size: textSize,
+                                                height: textHeight,
+                                                curveSegments: 12,
+                                                bevelEnabled: false
+                                            });
+                                                
+    textGeo.computeBoundingBox();
+    const textMat = new THREE.MeshBasicMaterial( { color: txtLineColor } );
+    const textMesh = new THREE.Mesh( textGeo, textMat );
+    const textCenter = textGeo.boundingBox.getCenter(new THREE.Vector3());
+    textMesh.position.set( -textCenter.x, -textCenter.y, z + textDeltaZ );
+
+    node.add( textMesh );
+
     scene.add( node );
-
     return node;
 }
 
+// given a node, toggles the box around it; assumes box is first child
+const toggleBox = ( node ) => node.children[0].visible = !node.children[0].visible;
+
+var heap = [];
 var treeNodes = [];
 var aryNodes = [];
-var heap = [];
-var textMeshes = {'ary':[], 'tree':[]};
+var lines = [];
 
 function initHeap() {
 
     // clear objects from scene
     treeNodes.forEach(node => scene.remove(node));
     aryNodes.forEach(node => scene.remove(node));
-    textMeshes['ary'].forEach(text => scene.remove(text));
-    textMeshes['tree'].forEach(text => scene.remove(text));
-    textMeshes['ary'] = [];
-    textMeshes['tree'] = [];
+    lines.forEach(line => scene.remove(line));
+    treeNodes = [];
+    aryNodes = [];
+    lines = [];
 
-
-    // initialize the nodes for the tree and array
-    treeNodes = [ createNode(treeXStart, treeYStart, boxZ, levelColors[0]) ];
-    aryNodes = [ createNode(aryXStart, aryY, boxZ, levelColors[0]) ];
-
-    console.log(treeXStart, treeYStart, aryY, aryWidth, aryDeltaX, aryXStart, textDeltaZ, boxZ);
-    
     // actually create the heap.
-    heap = [];
-    while(heap.length < heapSize){
-        const r = Math.floor(Math.random() * 100); // make all numbers be two digits. 
-        if (heap.indexOf(r) === -1) heap.push(r);
+    heap = [ "\u00D8" ];
+    while ( heap.length < heapSize + 1 ) {
+        const r = Math.floor( Math.random() * 100 );
+        if ( heap.indexOf(r) === -1 ) heap.push(r);
     }
+    
+    // initialize the nodes for the tree and array
+    treeNodes = [ createNode( heap[1], treeXStart, treeYStart, boxZ, levelColors[0], false ) ];
+    aryNodes  = [ createNode( heap[0], aryXStart, aryY, boxZ, 0xd3d3d3, true ) ]; // null box color
 
-    // create the text meshes for the numbers themselves. 
-    heap.forEach(num => {
-        Object.keys(textMeshes).forEach(key => {
-            let nstr = num.toString();
-            if (num < 10) {
-                nstr = '0' + nstr;
-            }
-            const geometry = new TextGeometry( nstr, {
-                                                        font: font,
-                                                        size: 8,
-                                                        height: 5,
-                                                        curveSegments: 12,
-                                                        bevelEnabled: true,
-                                                        bevelThickness: 1,
-                                                        bevelSize: 0.5,
-                                                        bevelOffset: 0,
-                                                        bevelSegments: 1
-                                                    } );
-                                                        
-            geometry.computeBoundingBox();
-            const material = [
-                                new THREE.MeshBasicMaterial( { color: 0xdddddd }),
-                                new THREE.MeshBasicMaterial( { color: 0x000000 })
-                            ];
-            const textMesh = new THREE.Mesh( geometry, material );
-            scene.add( textMesh );
-            textMeshes[key].push( textMesh );
-        })
-    });
-
-    // initialize the root text elements. 
-    const bx = (textMeshes['tree'][0].geometry.boundingBox.max.x - textMeshes['tree'][0].geometry.boundingBox.min.x) / 2;
-    const by = (textMeshes['tree'][0].geometry.boundingBox.max.y - textMeshes['tree'][0].geometry.boundingBox.min.y) / 2;
-    textMeshes['tree'][0].position.set(treeXStart - bx, treeYStart - by, boxZ + textDeltaZ); 
-    textMeshes['ary'][0].position.set(aryXStart - bx, aryY - by, boxZ + textDeltaZ);
-
-    for (let i = 1; i < heapSize; i++) {
-        const levelNum = Math.floor(Math.log2(i+1));
+    for (let i = 1; i < heapSize + 1; i++) {
         
-        const parentIndex = Math.floor((i - 1) / 2);
-        const parent = treeNodes[parentIndex];
-        const isLeft = i % 2 !== 0;
+        if (i < heapSize) {
+            const levelNum = Math.floor( Math.log2( i + 1 ) );
+            const parentIndex = Math.floor( (i - 1) / 2 );
+            const parent = treeNodes[ parentIndex ];
+            const isLeft = i % 2 !== 0;
 
-        const treeX = parent.position.x + (isLeft ? -100 : 100) * Math.pow(0.5, levelNum - 1);
-        const treeY = parent.position.y - 30;
-        const treeNode = createNode(treeX, treeY, boxZ, levelColors[levelNum]);
-        treeNodes.push(treeNode);
+            const treeX = parent.position.x + (isLeft ? -100 : 100) * Math.pow(0.5, levelNum - 1);
+            const treeY = parent.position.y - 30;
+            const treeNode = createNode(heap[i + 1], treeX, treeY, boxZ, levelColors[levelNum], false);
+            treeNodes.push(treeNode);
+        }
 
+        const levelNum = Math.floor( Math.log2( i ) );
         const aryX = aryXStart + i * aryDeltaX;
-        const aryNodeLo = createNode(aryX, aryY, boxZ, levelColors[levelNum]);
+        const aryNodeLo = createNode(heap[i], aryX, aryY, boxZ, levelColors[levelNum], true);
         aryNodes.push(aryNodeLo);
 
-        const bx = (textMeshes['tree'][i].geometry.boundingBox.max.x - textMeshes['tree'][i].geometry.boundingBox.min.x) / 2;
-        const by = (textMeshes['tree'][i].geometry.boundingBox.max.y - textMeshes['tree'][i].geometry.boundingBox.min.y) / 2;
-
-        textMeshes['tree'][i].position.set(treeX - bx, treeY - by, boxZ + 10);
-        textMeshes['ary'][i].position.set(aryX - bx, aryY - by, boxZ + 10);
     }
-    console.log(aryNodes);
+
+    for (let i = 1; i < heapSize; i++) {
+        const levelNum = Math.floor( Math.log2( i + 1 ) );
+        
+        const curr = treeNodes[i];
+        const parent = treeNodes[ Math.floor( ( i - 1 ) / 2 ) ];
+        
+        const geo = new LineGeometry();
+        geo.setPositions( [ ...curr.position.toArray(), ...parent.position.toArray() ] );
+
+        // sizing is off b/c of angles on lines; this fixes the problem. 
+        const mat = new LineMaterial( { 
+                                        color: txtLineColor,
+                                        linewidth: 0.002 * Math.pow( 0.66, levelNum - 1 )
+                                       } ); // not sure why so small, but it works.
+        const line = new Line2( geo, mat );
+        
+        scene.add( line );
+        lines.push( line )
+    }
+    
 }
+
+const LESS = '\u003C';
+const GREATER = '\u003E';
+const EQUAL = '\u003D\u003D';
+const LE = '\u2264';
+const GE = '\u2265';
+const HUH = '\u003F';
+
+var battleBox;
+function initBattleBox() {
+    scene.remove(battleBox);
+
+    const battleBoxYSpace = ( aryY - treeNodes[treeNodes.length - 1].position.y ) + boxDim * 3;
+    const battleBoxY = (treeNodes[treeNodes.length - 1].position.y + aryY ) / 2;
+    const battleBoxGeo = new THREE.BoxGeometry( 100, battleBoxYSpace, 1 );
+    const battleBoxMat = new THREE.MeshStandardMaterial( { color: 0x000000, roughness: 0.2, metalness: 0.3 } );
+    const bbox = new THREE.Mesh( battleBoxGeo, battleBoxMat );
+    bbox.position.set( 0, battleBoxY, boxZ + 5 );
+
+    const bboxNode1 = createNode( 0, -33, battleBoxY, boxZ, 0xd3d3d3 );
+    const bboxNode2 = createNode( HUH, 0, battleBoxY, boxZ, 0xd3d3d3 );
+    const bboxNode3 = createNode( 0, 33, battleBoxY, boxZ, 0xd3d3d3 );
+    
+    battleBox = new THREE.Group();
+    battleBox.add(bbox);
+    battleBox.add(bboxNode1);
+    battleBox.add(bboxNode2);
+    battleBox.add(bboxNode3);
+    
+    scene.add(battleBox);
+}
+
+async function toggleNodes(nodeList, onTime=5000*algoSpeed, offTime=500*algoSpeed) {
+    nodeList.forEach(node => toggleBox(node));
+    await new Promise((resolve) => setTimeout(resolve, onTime));
+    nodeList.forEach(node => toggleBox(node));
+    
+    await new Promise((resolve) => setTimeout(resolve, offTime));
+}
+
+async function compare(nodes) {
+    scene.remove(battleBox.children[0]);
+    
+    await toggleNodes(nodes[0]);
+
+    await toggleNodes(currNodes);
+}
+
+async function buildHeap() {
+    for (let i = heapSize - 1; i > 0; i -= 2) {
+        let curr = treeNodes[i];
+        let parent = treeNodes[ Math.floor( ( i - 1 ) / 2 ) ];
+        let sibling = i % 2 === 0 ? treeNodes[i - 1] : treeNodes[i + 1];
+
+        const currNodes = [ curr, parent, sibling ];
+        await compare(currNodes); 
+        
+    }
+        
+}
+
 
 function initGui() {
 
@@ -182,116 +256,66 @@ function initGui() {
 
     const param = {
         'num levels': 4,
-        'color scheme': 'viridis',
+        'palette': 'viridis',
         'width': 5,
-        'alphaToCoverage': true,
-        'dashed': false,
-        'dash scale': 1,
-        'dash / gap': 1
+        'textLineColor': "#ffffff",
+        'algo speed': 0.5
     };
 
-    gui.add( param, 'num levels', 2, 5, 1).onChange( function ( val ) { 
+    gui.add( param, 'num levels', 2, 6, 1).onChange( function ( val ) {
+        if (numLevels == val) return;
         numLevels = val;
         heapSize = Math.pow(2, numLevels) - 1;
-        levelColors = Array(numLevels).fill(0).map((_, i) => colors[colorFormat](i / numLevels));
+        levelColors = Array(numLevels).fill(0).map((_, i) => colors[colorFormat]((i + 1) / numLevels));
+        aryDeltaX = aryWidth / ( heapSize + 1 );
+        aryXStart = -aryWidth / 2 + aryDeltaX / 2;
+        
+        while (aryDeltaX > boxDim * 2 && val >= 4) {
+            boxDim += 5;
+            textSize += 3;
+            textHeight += 0.1;
+        }
+        
+        while (aryDeltaX < boxDim) {
+            boxDim -= 5;
+            textSize -= 3;
+            textHeight -= 0.1;
+        }
         initHeap();
+        initBattleBox();
     });
 
+    gui.add( param, 'palette', Object.keys(colors), 'viridis' ).onChange( function ( val ) {
+        colorFormat = val;
+        levelColors = Array(numLevels).fill(0).map((_, i) => colors[colorFormat]((i + 1) / numLevels));
+        initHeap();
+        initBattleBox();
+    }); 
 
-    // gui.add( param, 'line type', { 'LineGeometry': 0, 'gl.LINE': 1 } ).onChange( function ( val ) {
+    gui.addColor( param, 'textLineColor' ).onChange( function ( val ) {
+        val = val.replace('#', '');    
+        val = "rgb(" + parseInt(val.substring(0, 2), 16).toString() + "," + 
+                       parseInt(val.substring(2, 4), 16).toString() + "," + 
+                       parseInt(val.substring(4, 6), 16).toString() + ")";
+        if (txtLineColor == val) return;
+        txtLineColor = val;
+        initHeap();
+        initBattleBox();
+    });
 
-    //     switch ( val ) {
+    var obj = { add:function(){ buildHeap() }};
+    gui.add(obj, 'add').name('build heap (bottom-up)');
 
-    //         case 0:
-    //             line.visible = true;
-
-    //             line1.visible = false;
-
-    //             break;
-
-    //         case 1:
-    //             line.visible = false;
-
-    //             line1.visible = true;
-
-    //             break;
-
-    //     }
-
-    // } );
-
-    // gui.add( param, 'world units' ).onChange( function ( val ) {
-
-    //     matLine.worldUnits = val;
-    //     matLine.needsUpdate = true;
-
-    // } );
-
-    // gui.add( param, 'width', 1, 10 ).onChange( function ( val ) {
-
-    //     matLine.linewidth = val;
-
-    // } );
-
-    // gui.add( param, 'alphaToCoverage' ).onChange( function ( val ) {
-
-    //     matLine.alphaToCoverage = val;
-
-    // } );
-
-    // gui.add( param, 'dashed' ).onChange( function ( val ) {
-
-    //     matLine.dashed = val;
-    //     line1.material = val ? matLineDashed : matLineBasic;
-
-    // } );
-
-    // gui.add( param, 'dash scale', 0.5, 2, 0.1 ).onChange( function ( val ) {
-
-    //     matLine.dashScale = val;
-    //     matLineDashed.scale = val;
-
-    // } );
-
-    // gui.add( param, 'dash / gap', { '2 : 1': 0, '1 : 1': 1, '1 : 2': 2 } ).onChange( function ( val ) {
-
-    //     switch ( val ) {
-
-    //         case 0:
-    //             matLine.dashSize = 2;
-    //             matLine.gapSize = 1;
-
-    //             matLineDashed.dashSize = 2;
-    //             matLineDashed.gapSize = 1;
-
-    //             break;
-
-    //         case 1:
-    //             matLine.dashSize = 1;
-    //             matLine.gapSize = 1;
-
-    //             matLineDashed.dashSize = 1;
-    //             matLineDashed.gapSize = 1;
-
-    //             break;
-
-    //         case 2:
-    //             matLine.dashSize = 1;
-    //             matLine.gapSize = 2;
-
-    //             matLineDashed.dashSize = 1;
-    //             matLineDashed.gapSize = 2;
-
-    //             break;
-
-    //     }
-
-    // } );
-
+    gui.add( param, 'algo speed', 0.01, 1).onChange( async function ( val ) {
+        algoSpeed = 100 - val;
+    });
 }
+
+
 
 initGui();
 initHeap();
+initBattleBox();
 
 // Render the scene
 function render() {
