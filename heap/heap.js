@@ -314,12 +314,15 @@ async function compare(currIdx, parentIdx, siblingIdx) {
     const parentNum = heap[ parentIdx + 1 ];
     const siblingNum = heap[ siblingIdx + 1 ];
 
-    let symbol = currNum < siblingNum ? LESS : GREATER;
-    const newBox = currNum < siblingNum ? 'bboxRight' : 'bboxLeft';
+    const firstBox = currIdx % 2 !== 0 ? 'bboxLeft' : 'bboxRight';
+    const secondBox = currIdx % 2 !== 0 ? 'bboxRight' : 'bboxLeft';
+    
+    let symbol = currNum < siblingNum && firstBox === 'bboxLeft' || siblingNum < currNum && firstBox === 'bboxRight' ? LESS : GREATER;
+    const newBox = symbol === LESS  ? 'bboxRight' : 'bboxLeft';
    
-    replaceBBox(currNum, 'bboxLeft');
+    replaceBBox(currNum, firstBox);
     await toggleNodes( [ currIdx ] );
-    replaceBBox(siblingNum, 'bboxRight');
+    replaceBBox(siblingNum, secondBox);
     replaceBBox(symbol, 'bboxMiddle');
     await toggleNodes( [ siblingIdx ] );
     replaceBBox(HUH, 'bboxMiddle');
@@ -328,7 +331,7 @@ async function compare(currIdx, parentIdx, siblingIdx) {
     
     if ( currNum < siblingNum ) {
         if ( currNum < parentNum ) {
-            replaceBBox(LESS, 'bboxMiddle');
+            replaceBBox(firstBox == 'bboxLeft' ? LESS : GREATER, 'bboxMiddle');
             await toggleNodes( [ currIdx, parentIdx ] );
             await swap(currIdx, parentIdx);
         }else {
@@ -336,7 +339,7 @@ async function compare(currIdx, parentIdx, siblingIdx) {
         }
     }else {
         if ( siblingNum < parentNum ) {
-            replaceBBox(GREATER, 'bboxMiddle');
+            replaceBBox(firstBox == 'bboxRight' ? LESS : GREATER, 'bboxMiddle');
             await toggleNodes( [ siblingIdx, parentIdx ] );
             await swap(siblingIdx, parentIdx);
         }else {
@@ -352,11 +355,9 @@ async function buildHeap() {
     for (let i = heapSize - 1; i > 0; i -= 2) {
         const parentIdx = Math.floor( ( i - 1 ) / 2 );
         const siblingIdx = i % 2 === 0 ? i - 1 : i + 1;
-
         await compare(i, parentIdx, siblingIdx); 
-        
     }
-        
+    algoStatus = "stopped";
 }
 
 
