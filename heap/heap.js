@@ -95,7 +95,14 @@ function createNode(num, x, y, z, color) {
 
     node.add( lineMesh );
 
-    // make text
+    scene.add( node );
+
+    return node;
+}
+
+function createTextMesh( num, x, y, z ) {
+    // make text - although the text object is NOT a child of the node, it's
+    // convienent to create it here; add it to the scene. 
     let nstr = num.toString();
     if (num < 10) nstr = '0' + nstr; // pad with 0
 
@@ -106,24 +113,23 @@ function createNode(num, x, y, z, color) {
                                                 curveSegments: 12,
                                                 bevelEnabled: false
                                             });
-                                                
+            
     textGeo.computeBoundingBox();
     const textMat = new THREE.MeshBasicMaterial( { color: txtLineColor } );
     const textMesh = new THREE.Mesh( textGeo, textMat );
     const textCenter = textGeo.boundingBox.getCenter(new THREE.Vector3());
-    textMesh.position.set( -textCenter.x, -textCenter.y, z + textDeltaZ );
+    textMesh.position.set( x - textCenter.x, y - textCenter.y, z + textDeltaZ );
     textMesh.userData.text = num;
-
-    node.add( textMesh );
-
-    scene.add( node );
-    return node;
+    textMesh.name = num.toString();
+    scene.add( textMesh );
 }
 
 // given a node, toggles the box around it; assumes box is first child
 const toggleBox = ( node ) => node.children[0].visible = !node.children[0].visible;
 
 var heap = [];
+var treeText = []
+var aryText = [];
 var treeNodes = [];
 var aryNodes = [];
 var lines = [];
@@ -133,6 +139,8 @@ function initHeap() {
     // clear objects from scene
     treeNodes.forEach(node => scene.remove(node));
     aryNodes.forEach(node => scene.remove(node));
+    treeText.forEach(text => scene.remove(text));
+    aryText.forEach(text => scene.remove(text));
     lines.forEach(line => scene.remove(line));
     treeNodes = [];
     aryNodes = [];
@@ -149,6 +157,9 @@ function initHeap() {
     treeNodes = [ createNode( heap[1], treeXStart, treeYStart, boxZ, levelColors[0], false ) ];
     aryNodes  = [ createNode( heap[0], aryXStart, aryY, boxZ, 0xd3d3d3, true ) ]; // null box color
 
+    treeText = [ createTextMesh( heap[1], treeXStart, treeYStart, boxZ ) ];
+    aryText  = [ createTextMesh( heap[0], aryXStart, aryY, boxZ ) ];
+
     for (let i = 1; i < heapSize + 1; i++) {
         
         if (i < heapSize) {
@@ -161,6 +172,9 @@ function initHeap() {
             const treeY = parent.position.y - 30;
             const treeNode = createNode(heap[i + 1], treeX, treeY, boxZ, levelColors[levelNum], false);
             treeNodes.push(treeNode);
+
+            const textMesh = createTextMesh( heap[i + 1], treeX, treeY, boxZ );
+            treeText.push(textMesh);
         }
 
         const levelNum = Math.floor( Math.log2( i ) );
@@ -168,8 +182,12 @@ function initHeap() {
         const aryNodeLo = createNode(heap[i], aryX, aryY, boxZ, levelColors[levelNum], true);
         aryNodes.push(aryNodeLo);
 
+        const textMesh = createTextMesh( heap[i], aryX, aryY, boxZ );
+        aryText.push(textMesh);
+
     }
 
+    // lines connecting the nodes
     for (let i = 1; i < heapSize; i++) {
         const levelNum = Math.floor( Math.log2( i + 1 ) );
         
@@ -235,7 +253,7 @@ async function toggleNodes(nodeList, onTime=5000*algoSpeed, offTime=500*algoSpee
 }
 var tween;
 
-async function compare(nodes) {
+async function compare(curr, parent, sibling) {
     let y;
     let toRem;
     battleBox.children.forEach( (child, i) => {
@@ -245,20 +263,59 @@ async function compare(nodes) {
         }
     })
     battleBox.remove(battleBox.children[toRem]);
-    const toAdd = createNode( nodes[0].children[1].userData.text, -33, y, boxZ, 0xd3d3d3 );
+    const toAdd = createNode( curr.children[1].userData.text, -33, y, boxZ, 0xd3d3d3 );
     toAdd.name = 'bboxNode1';
     battleBox.add( toAdd );
-   
-    tween = new TWEEN.Tween(toAdd.position).to( { x: [-50, -100, -200], y: 75 }, 500)
-                                    .yoyo(true)
-                                    .repeat(Infinity)
-                                    .easing(TWEEN.Easing.Cubic.InOut)
-                                    .start();
-    tween.interpolation(TWEEN.Interpolation.Bezier)
-    
-    await toggleNodes( [ nodes[0] ] );
 
-    await toggleNodes(nodes);
+
+    // given two points, find a point perperdent to the line between them
+    // that is a distance of 50 from the first point
+    const perp = (p1, p2) => {
+        const x = p1.x + (p2.x - p1.x) / 2;
+        const y = p1.y + (p2.y - p1.y) / 2;
+        const dist = Math.sqrt( Math.pow( p2.x - p1.x, 2 ) + Math.pow( p2.y - p1.y, 2 ) );
+        const ratio = 50 / dist;
+        const newX = x + (p2.y - p1.y) * ratio;
+        const newY = y - (p2.x - p1.x) * ratio;
+        return new THREE.Vector2(newX, newY);
+    }
+    
+    const p1 = perp(curr.position, parent.position);
+    const p2 = perp(parent.position, curr.position);
+
+    const newChildText = parent.children[1].clone();
+    newChildText.userData.text = curr.children[1].userData.text;
+    newChildText.material.color = curr.children[1].material.color;
+    
+    const newParentText = curr.children[1].clone();
+    newParentText.userData.text = parent.children[1].userData.text;
+    newParentText.material.color = parent.children[1].material.color;
+
+
+    const tweenDown = new TWEEN.Tween(parent.children[1].position).to( { x: curr.position.x, y: curr.position.y }, 1000)
+                                                      .interpolation(TWEEN.Interpolation.Bezier).start();
+
+    const tweenUp = new TWEEN.Tween(curr.children[1].position).to( { x: parent.position.x, y: parent.position.y }, 1000)
+                                                      .interpolation(TWEEN.Interpolation.Bezier).start();
+
+    
+    // curr.remove(curr.children[1]);
+    // parent.remove(parent.children[1]);
+
+    // curr.add(newChildText);
+    // parent.add(newParentText);
+
+
+    // const currColor = curr.material.color;
+    // const parentColor = parent.material.color;
+
+    
+    // console.log(curr.material.color);
+    // console.log(parent.material.color);
+   
+    
+    await toggleNodes( [ curr ] );
+    await toggleNodes([curr, parent, sibling]);
 }
 
 async function buildHeap() {
@@ -267,8 +324,7 @@ async function buildHeap() {
         let parent = treeNodes[ Math.floor( ( i - 1 ) / 2 ) ];
         let sibling = i % 2 === 0 ? treeNodes[i - 1] : treeNodes[i + 1];
 
-        const currNodes = [ curr, parent, sibling ];
-        await compare(currNodes); 
+        await compare(curr, parent, sibling); 
         
     }
         
