@@ -60,6 +60,7 @@ var aryXStart = -aryWidth / 2 + aryDeltaX / 2;
 var textSize = 8;
 var textHeight = 5; 
 var algoSpeed = 0.5;
+var algoStatus = 'stopped';
 
 // Define a function to create a single node
 function createNode(num, x, y, z, color) {
@@ -100,7 +101,7 @@ function createNode(num, x, y, z, color) {
     return node;
 }
 
-function createTextMesh( num, x, y, z ) {
+function createTextMesh( num, x, y, z, format, setName = true ) {
     // make text - although the text object is NOT a child of the node, it's
     // convienent to create it here; add it to the scene. 
     let nstr = num.toString();
@@ -120,8 +121,9 @@ function createTextMesh( num, x, y, z ) {
     const textCenter = textGeo.boundingBox.getCenter(new THREE.Vector3());
     textMesh.position.set( x - textCenter.x, y - textCenter.y, z + textDeltaZ );
     textMesh.userData.text = num;
-    textMesh.name = num.toString();
+    if ( setName ) textMesh.name = num.toString() + '_' + format;
     scene.add( textMesh );
+    return textMesh;
 }
 
 // given a node, toggles the box around it; assumes box is first child
@@ -157,8 +159,8 @@ function initHeap() {
     treeNodes = [ createNode( heap[1], treeXStart, treeYStart, boxZ, levelColors[0], false ) ];
     aryNodes  = [ createNode( heap[0], aryXStart, aryY, boxZ, 0xd3d3d3, true ) ]; // null box color
 
-    treeText = [ createTextMesh( heap[1], treeXStart, treeYStart, boxZ ) ];
-    aryText  = [ createTextMesh( heap[0], aryXStart, aryY, boxZ ) ];
+    createTextMesh( heap[1], treeXStart, treeYStart, boxZ, 'tree' );
+    createTextMesh( heap[0], aryXStart, aryY, boxZ, 'ary' );
 
     for (let i = 1; i < heapSize + 1; i++) {
         
@@ -173,8 +175,7 @@ function initHeap() {
             const treeNode = createNode(heap[i + 1], treeX, treeY, boxZ, levelColors[levelNum], false);
             treeNodes.push(treeNode);
 
-            const textMesh = createTextMesh( heap[i + 1], treeX, treeY, boxZ );
-            treeText.push(textMesh);
+            createTextMesh( heap[i + 1], treeX, treeY, boxZ, 'tree' );
         }
 
         const levelNum = Math.floor( Math.log2( i ) );
@@ -182,8 +183,7 @@ function initHeap() {
         const aryNodeLo = createNode(heap[i], aryX, aryY, boxZ, levelColors[levelNum], true);
         aryNodes.push(aryNodeLo);
 
-        const textMesh = createTextMesh( heap[i], aryX, aryY, boxZ );
-        aryText.push(textMesh);
+        createTextMesh( heap[i], aryX, aryY, boxZ, 'array');
 
     }
 
@@ -229,102 +229,131 @@ function initBattleBox() {
     bbox.position.set( 0, battleBoxY, boxZ + 5 );
 
     const bboxNode1 = createNode( 0, -33, battleBoxY, boxZ, 0xd3d3d3 );
-    bboxNode1.name = 'bboxNode1';
-    const bboxNode2 = createNode( HUH, 0, battleBoxY, boxZ, 0xd3d3d3 );
-    bboxNode2.name = 'bboxNode2';
+    const bboxNode2 = createNode( 0, 0, battleBoxY, boxZ, 0xd3d3d3 );
     const bboxNode3 = createNode( 0, 33, battleBoxY, boxZ, 0xd3d3d3 );
-    bboxNode3.name = 'bboxNode3';
+    
+    const bboxTxt1 = createTextMesh( 0, -33, battleBoxY, boxZ, 'battle', false );
+    bboxTxt1.visible = false;
+    bboxTxt1.name = 'bboxLeft';
+    const bboxTxt2 = createTextMesh( HUH, 0, battleBoxY, boxZ, 'battle', false );
+    bboxTxt2.name = 'bboxMiddle';
+    const bboxTxt3 = createTextMesh( 0, 33, battleBoxY, boxZ, 'battle', false );
+    bboxTxt3.name = 'bboxRight';  
+    bboxTxt3.visible = false;
     
     battleBox = new THREE.Group();
     battleBox.add(bbox);
     battleBox.add(bboxNode1);
     battleBox.add(bboxNode2);
     battleBox.add(bboxNode3);
+    battleBox.add(bboxTxt1);
+    battleBox.add(bboxTxt2);
+    battleBox.add(bboxTxt3);
     
     scene.add(battleBox);
 }
 
-async function toggleNodes(nodeList, onTime=5000*algoSpeed, offTime=500*algoSpeed) {
-    nodeList.forEach(node => toggleBox(node));
+function replaceBBox(value, name) {
+    battleBox.remove(battleBox.getObjectByName(name));
+    const bboxY = (treeNodes[treeNodes.length - 1].position.y + aryY ) / 2;
+    const bboxX = name === 'bboxLeft' ? -33 : name === 'bboxRight' ? 33 : 0;
+    const bboxTxt = createTextMesh( value, bboxX, bboxY, boxZ, 'battle', false );
+    bboxTxt.name = name;
+    battleBox.add( bboxTxt );
+}
+
+async function toggleNodes(nodeList, onTime=4000*algoSpeed, offTime=300*algoSpeed) {
+    nodeList.forEach(nodeIdx => toggleBox(treeNodes[nodeIdx]));
     await new Promise((resolve) => setTimeout(resolve, onTime));
-    nodeList.forEach(node => toggleBox(node));
-    
+    nodeList.forEach(nodeIdx => toggleBox(treeNodes[nodeIdx]));
     await new Promise((resolve) => setTimeout(resolve, offTime));
 }
-var tween;
-
-async function compare(curr, parent, sibling) {
-    let y;
-    let toRem;
-    battleBox.children.forEach( (child, i) => {
-        if (child.name === "bboxNode1") {
-            y = child.position.y;
-            toRem = i;
-        }
-    })
-    battleBox.remove(battleBox.children[toRem]);
-    const toAdd = createNode( curr.children[1].userData.text, -33, y, boxZ, 0xd3d3d3 );
-    toAdd.name = 'bboxNode1';
-    battleBox.add( toAdd );
 
 
-    // given two points, find a point perperdent to the line between them
-    // that is a distance of 50 from the first point
-    const perp = (p1, p2) => {
-        const x = p1.x + (p2.x - p1.x) / 2;
-        const y = p1.y + (p2.y - p1.y) / 2;
-        const dist = Math.sqrt( Math.pow( p2.x - p1.x, 2 ) + Math.pow( p2.y - p1.y, 2 ) );
-        const ratio = 50 / dist;
-        const newX = x + (p2.y - p1.y) * ratio;
-        const newY = y - (p2.x - p1.x) * ratio;
-        return new THREE.Vector2(newX, newY);
-    }
+// given two points, find a point perpendicular to the line between them
+// that is a distance of 50 from the first point
+const perp = (p1, p2) => {
+    const x = p1.x + (p2.x - p1.x) / 2;
+    const y = p1.y + (p2.y - p1.y) / 2;
+    const dist = Math.sqrt( Math.pow( p2.x - p1.x, 2 ) + Math.pow( p2.y - p1.y, 2 ) );
+    const ratio = boxDim * 2 / dist;
+    const newX = x + (p2.y - p1.y) * ratio;
+    const newY = y - (p2.x - p1.x) * ratio;
+    return new THREE.Vector2(newX, newY);
+}
+
+async function swap(childIdx, parentIdx) {
+
+    const numChild = heap[ childIdx + 1 ];
+    const numParent = heap[ parentIdx + 1 ];
+
+    const childTreeText = scene.getObjectByName(numChild.toString() + "_tree");
+    const parentTreeText = scene.getObjectByName(numParent.toString() + "_tree");
     
-    const p1 = perp(curr.position, parent.position);
-    const p2 = perp(parent.position, curr.position);
+    const p1 = perp(childTreeText.position, parentTreeText.position);
+    const p2 = perp(parentTreeText.position, childTreeText.position);
 
-    const newChildText = parent.children[1].clone();
-    newChildText.userData.text = curr.children[1].userData.text;
-    newChildText.material.color = curr.children[1].material.color;
-    
-    const newParentText = curr.children[1].clone();
-    newParentText.userData.text = parent.children[1].userData.text;
-    newParentText.material.color = parent.children[1].material.color;
+    const tweenDown = new TWEEN.Tween(childTreeText.position).to( {
+                                                                    x: [ p1.x, parentTreeText.position.x ], 
+                                                                    y: [ p1.x, parentTreeText.position.y ]
+                                                                 }, 1000)
+                                                            .interpolation(TWEEN.Interpolation.Bezier).start();
 
+    const tweenUp = new TWEEN.Tween(parentTreeText.position).to( {
+                                                                    x: [ p2.x, childTreeText.position.x ], 
+                                                                    y: [ p2.x, childTreeText.position.y ]
+                                                                 }, 1000)
+                                                            .interpolation(TWEEN.Interpolation.Bezier).start();
+    heap[ childIdx + 1 ] = numParent;
+    heap[ parentIdx + 1 ] = numChild;
+                                                            
+}
 
-    const tweenDown = new TWEEN.Tween(parent.children[1].position).to( { x: curr.position.x, y: curr.position.y }, 1000)
-                                                      .interpolation(TWEEN.Interpolation.Bezier).start();
+async function compare(currIdx, parentIdx, siblingIdx) {
+    const currNum = heap[ currIdx + 1 ];
+    const parentNum = heap[ parentIdx + 1 ];
+    const siblingNum = heap[ siblingIdx + 1 ];
 
-    const tweenUp = new TWEEN.Tween(curr.children[1].position).to( { x: parent.position.x, y: parent.position.y }, 1000)
-                                                      .interpolation(TWEEN.Interpolation.Bezier).start();
-
-    
-    // curr.remove(curr.children[1]);
-    // parent.remove(parent.children[1]);
-
-    // curr.add(newChildText);
-    // parent.add(newParentText);
-
-
-    // const currColor = curr.material.color;
-    // const parentColor = parent.material.color;
-
-    
-    // console.log(curr.material.color);
-    // console.log(parent.material.color);
+    let symbol = currNum < siblingNum ? LESS : GREATER;
+    const newBox = currNum < siblingNum ? 'bboxRight' : 'bboxLeft';
    
+    replaceBBox(currNum, 'bboxLeft');
+    await toggleNodes( [ currIdx ] );
+    replaceBBox(siblingNum, 'bboxRight');
+    replaceBBox(symbol, 'bboxMiddle');
+    await toggleNodes( [ siblingIdx ] );
+    replaceBBox(HUH, 'bboxMiddle');
+    replaceBBox(parentNum, newBox);
+    await toggleNodes( [ parentIdx ] );
     
-    await toggleNodes( [ curr ] );
-    await toggleNodes([curr, parent, sibling]);
+    if ( currNum < siblingNum ) {
+        if ( currNum < parentNum ) {
+            replaceBBox(LESS, 'bboxMiddle');
+            await toggleNodes( [ currIdx, parentIdx ] );
+            await swap(currIdx, parentIdx);
+        }else {
+            replaceBBox(GREATER, 'bboxMiddle');
+        }
+    }else {
+        if ( siblingNum < parentNum ) {
+            replaceBBox(GREATER, 'bboxMiddle');
+            await toggleNodes( [ siblingIdx, parentIdx ] );
+            await swap(siblingIdx, parentIdx);
+        }else {
+            replaceBBox(LESS, 'bboxMiddle');
+        }
+    }
+    replaceBBox(HUH, 'bboxMiddle');
+    battleBox.getObjectByName('bboxLeft').visible = false;
+    battleBox.getObjectByName('bboxRight').visible = false;
 }
 
 async function buildHeap() {
     for (let i = heapSize - 1; i > 0; i -= 2) {
-        let curr = treeNodes[i];
-        let parent = treeNodes[ Math.floor( ( i - 1 ) / 2 ) ];
-        let sibling = i % 2 === 0 ? treeNodes[i - 1] : treeNodes[i + 1];
+        const parentIdx = Math.floor( ( i - 1 ) / 2 );
+        const siblingIdx = i % 2 === 0 ? i - 1 : i + 1;
 
-        await compare(curr, parent, sibling); 
+        await compare(i, parentIdx, siblingIdx); 
         
     }
         
@@ -384,7 +413,12 @@ function initGui() {
         initBattleBox();
     });
 
-    var obj = { add:function(){ buildHeap() }};
+    var obj = { add:function(){ 
+                                if (algoStatus === "stopped") {
+                                    algoStatus = "running";
+                                    buildHeap();
+                                }
+                            }};
     gui.add(obj, 'add').name('build heap (bottom-up)');
 
     gui.add( param, 'algo speed', 0.01, 1).onChange( async function ( val ) {
