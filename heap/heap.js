@@ -7,6 +7,8 @@ import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { Line2 } from 'three/addons/lines/Line2.js';
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 
+import { TWEEN } from 'https://unpkg.com/three@0.139.0/examples/jsm/libs/tween.module.min.js';
+
 const font = new FontLoader().parse( fontData );
 const frustumSize = 250;
 const aspect = window.innerWidth / window.innerHeight;
@@ -110,6 +112,7 @@ function createNode(num, x, y, z, color) {
     const textMesh = new THREE.Mesh( textGeo, textMat );
     const textCenter = textGeo.boundingBox.getCenter(new THREE.Vector3());
     textMesh.position.set( -textCenter.x, -textCenter.y, z + textDeltaZ );
+    textMesh.userData.text = num;
 
     node.add( textMesh );
 
@@ -208,8 +211,11 @@ function initBattleBox() {
     bbox.position.set( 0, battleBoxY, boxZ + 5 );
 
     const bboxNode1 = createNode( 0, -33, battleBoxY, boxZ, 0xd3d3d3 );
+    bboxNode1.name = 'bboxNode1';
     const bboxNode2 = createNode( HUH, 0, battleBoxY, boxZ, 0xd3d3d3 );
+    bboxNode2.name = 'bboxNode2';
     const bboxNode3 = createNode( 0, 33, battleBoxY, boxZ, 0xd3d3d3 );
+    bboxNode3.name = 'bboxNode3';
     
     battleBox = new THREE.Group();
     battleBox.add(bbox);
@@ -229,11 +235,28 @@ async function toggleNodes(nodeList, onTime=5000*algoSpeed, offTime=500*algoSpee
 }
 
 async function compare(nodes) {
-    scene.remove(battleBox.children[0]);
+    let y;
+    let toRem;
+    battleBox.children.forEach( (child, i) => {
+        if (child.name === "bboxNode1") {
+            y = child.position.y;
+            toRem = i;
+        }
+    })
+    battleBox.remove(battleBox.children[toRem]);
+    const toAdd = createNode( nodes[0].children[1].userData.text, -33, y, boxZ, 0xd3d3d3 );
+    toAdd.name = 'bboxNode1';
+    battleBox.add( toAdd );
+   
+    new TWEEN.Tween(toAdd.position).to( { x: -100 }, 500)
+                                    .yoyo(true)
+                                    .repeat(Infinity)
+                                    .easing(TWEEN.Easing.Cubic.InOut)
+                                    .start();
     
-    await toggleNodes(nodes[0]);
+    await toggleNodes( [ nodes[0] ] );
 
-    await toggleNodes(currNodes);
+    await toggleNodes(nodes);
 }
 
 async function buildHeap() {
@@ -312,7 +335,6 @@ function initGui() {
 }
 
 
-
 initGui();
 initHeap();
 initBattleBox();
@@ -321,5 +343,6 @@ initBattleBox();
 function render() {
     requestAnimationFrame(render);
     renderer.render(scene, camera);
+    TWEEN.update();
 }
 render();
