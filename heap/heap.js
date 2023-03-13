@@ -18,13 +18,13 @@ const camera = new THREE.OrthographicCamera( frustumSize * aspect / - 2,
                                              frustumSize / - 2, 1, 1000 );
 camera.position.z = 50;
 const scene = new THREE.Scene();
-scene.background = new THREE.Color( 0xf0f0f0 );
+scene.background = new THREE.Color( 0xffffff );
 
 const light = new THREE.AmbientLight( 0xffffff );
 scene.add( light );
 
 // Set up the renderer
-const renderer = new THREE.WebGLRenderer();
+const renderer = new THREE.WebGLRenderer( { antialias: true } );
 renderer.setPixelRatio( window.devicePixelRatio );
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
@@ -54,25 +54,25 @@ var numLevels = 4;
 var heapSize = Math.pow(2, numLevels) - 1;
 var levelColors = Array(numLevels).fill(0).map((_, i) => colors[colorFormat]((i + 1) / numLevels));
 var boxDim = 16;
-var txtLineColor = 0xffffff;
+var lineColor = 0x000000;
+var txtColor = 0xffffff;
 var aryDeltaX = aryWidth / ( heapSize + 1 );
 var aryXStart = -aryWidth / 2 + aryDeltaX / 2;
 var textSize = 8;
 var textHeight = 5; 
-var algoSpeed = 0.5;
+var algoSpeed = 1;
 var algoStatus = 'stopped';
 
 // Define a function to create a single node
-function createNode(num, x, y, z, color) {
+function createNode(x, y, z, level) {
     const geometry = new THREE.BoxGeometry(boxDim, boxDim, boxDim);
     const material = new THREE.MeshStandardMaterial({   
-                                                        color: color, 
+                                                        color: level == 0xd3d3d3 ? level : levelColors[level], 
                                                         opacity: 1, 
                                                         transparent: false,
                                                         polygonOffset: true,
                                                         polygonOffsetFactor: 1, // positive value pushes polygon further away
                                                         polygonOffsetUnits: 1, 
-                                                        roughness: 0.2, metalness: 0.3,
                                                     });
 
     const node = new THREE.Mesh( geometry, material );
@@ -96,12 +96,14 @@ function createNode(num, x, y, z, color) {
 
     node.add( lineMesh );
 
+    node.userData.level = level;
+
     scene.add( node );
 
     return node;
 }
 
-function createTextMesh( num, x, y, z, format, setName = true ) {
+function createTextMesh( num, x, y, z, format ) {
     // make text - although the text object is NOT a child of the node, it's
     // convienent to create it here; add it to the scene. 
     let nstr = num.toString();
@@ -112,16 +114,19 @@ function createTextMesh( num, x, y, z, format, setName = true ) {
                                                 size: textSize,
                                                 height: textHeight,
                                                 curveSegments: 12,
-                                                bevelEnabled: false
+                                                bevelEnabled: true,
+                                                bevelThickness: 0.5,
+                                                bevelSize: 0.5,
+                                                bevelOffset: 0,
+                                                bevelSegments: 5
                                             });
             
     textGeo.computeBoundingBox();
-    const textMat = new THREE.MeshBasicMaterial( { color: txtLineColor } );
+    const textMat = [ new THREE.MeshBasicMaterial( { color: txtColor } ), new THREE.MeshBasicMaterial( { color: lineColor } ) ] ;
     const textMesh = new THREE.Mesh( textGeo, textMat );
-    const textCenter = textGeo.boundingBox.getCenter(new THREE.Vector3());
+    const textCenter = textGeo.boundingBox.getCenter( new THREE.Vector3() );
     textMesh.position.set( x - textCenter.x, y - textCenter.y, z + textDeltaZ );
-    textMesh.userData.text = num;
-    if ( setName ) textMesh.name = num.toString() + '_' + format;
+    textMesh.name = num.toString() + '_' + format;
     scene.add( textMesh );
     return textMesh;
 }
@@ -130,8 +135,6 @@ function createTextMesh( num, x, y, z, format, setName = true ) {
 const toggleBox = ( node ) => node.children[0].visible = !node.children[0].visible;
 
 var heap = [];
-var treeText = []
-var aryText = [];
 var treeNodes = [];
 var aryNodes = [];
 var lines = [];
@@ -141,12 +144,17 @@ function initHeap() {
     // clear objects from scene
     treeNodes.forEach(node => scene.remove(node));
     aryNodes.forEach(node => scene.remove(node));
-    treeText.forEach(text => scene.remove(text));
-    aryText.forEach(text => scene.remove(text));
     lines.forEach(line => scene.remove(line));
     treeNodes = [];
     aryNodes = [];
     lines = [];
+
+    // clear text meshes
+    for ( let elem of heap ) {
+        for ( let format of [ 'tree', 'array' ]) {
+            scene.remove( scene.getObjectByName( elem.toString() + '_' + format ) );
+        }
+    }
 
     // actually create the heap.
     heap = [ "\u00D8" ];
@@ -156,11 +164,11 @@ function initHeap() {
     }
     
     // initialize the nodes for the tree and array
-    treeNodes = [ createNode( heap[1], treeXStart, treeYStart, boxZ, levelColors[0], false ) ];
-    aryNodes  = [ createNode( heap[0], aryXStart, aryY, boxZ, 0xd3d3d3, true ) ]; // null box color
+    treeNodes = [ createNode( treeXStart, treeYStart, boxZ, 0, false ) ];
+    aryNodes  = [ createNode( aryXStart, aryY, boxZ, 0xd3d3d3, true ) ]; // null box color
 
     createTextMesh( heap[1], treeXStart, treeYStart, boxZ, 'tree' );
-    createTextMesh( heap[0], aryXStart, aryY, boxZ, 'ary' );
+    createTextMesh( heap[0], aryXStart, aryY, boxZ, 'array' );
 
     for (let i = 1; i < heapSize + 1; i++) {
         
@@ -172,7 +180,7 @@ function initHeap() {
 
             const treeX = parent.position.x + (isLeft ? -100 : 100) * Math.pow(0.5, levelNum - 1);
             const treeY = parent.position.y - 30;
-            const treeNode = createNode(heap[i + 1], treeX, treeY, boxZ, levelColors[levelNum], false);
+            const treeNode = createNode( treeX, treeY, boxZ, levelNum, false);
             treeNodes.push(treeNode);
 
             createTextMesh( heap[i + 1], treeX, treeY, boxZ, 'tree' );
@@ -180,7 +188,7 @@ function initHeap() {
 
         const levelNum = Math.floor( Math.log2( i ) );
         const aryX = aryXStart + i * aryDeltaX;
-        const aryNodeLo = createNode(heap[i], aryX, aryY, boxZ, levelColors[levelNum], true);
+        const aryNodeLo = createNode( aryX, aryY, boxZ, levelNum, true);
         aryNodes.push(aryNodeLo);
 
         createTextMesh( heap[i], aryX, aryY, boxZ, 'array');
@@ -199,8 +207,8 @@ function initHeap() {
 
         // sizing is off b/c of angles on lines; this fixes the problem. 
         const mat = new LineMaterial( { 
-                                        color: txtLineColor,
-                                        linewidth: 0.002 * Math.pow( 0.66, levelNum - 1 )
+                                        color: lineColor,
+                                        linewidth: 0.003 * Math.pow( 0.85, levelNum - 1 )
                                        } ); // not sure why so small, but it works.
         const line = new Line2( geo, mat );
         
@@ -210,16 +218,11 @@ function initHeap() {
     
 }
 
-const LESS = '\u003C';
-const GREATER = '\u003E';
-const EQUAL = '\u003D\u003D';
-const LE = '\u2264';
-const GE = '\u2265';
-const HUH = '\u003F';
-
-async function toggleNodes(nodeList, onTime=4000*algoSpeed, offTime=300*algoSpeed) {
+async function toggleNodes(nodeList, onTime=2000*algoSpeed, offTime=300*algoSpeed) {
+    if ( algoStatus === "paused" ) await pause();
     nodeList.forEach(nodeIdx => toggleBox(treeNodes[nodeIdx]));
     await new Promise((resolve) => setTimeout(resolve, onTime));
+    if ( algoStatus === "paused" ) await pause();
     nodeList.forEach(nodeIdx => toggleBox(treeNodes[nodeIdx]));
     await new Promise((resolve) => setTimeout(resolve, offTime));
 }
@@ -267,8 +270,8 @@ async function swap(childIdx, parentIdx) {
 async function reHeapDown( parentIdx ) {
     const leftIdx = 2 * parentIdx + 1;
     const rightIdx = 2 * parentIdx + 2;
-    if ( leftIdx >= heapSize ) return; // no children (leaf
-    await compare(leftIdx, parentIdx, rightIdx); //assume heap always complete. 
+    if ( leftIdx >= heapSize ) return; // no children (leaf) - assume heap always full.
+    await compare(leftIdx, parentIdx, rightIdx);
 }
 
 async function compare(currIdx, parentIdx, siblingIdx) {
@@ -291,26 +294,35 @@ async function compare(currIdx, parentIdx, siblingIdx) {
     }
 }
 
+async function pause() {
+    while ( algoStatus === "paused" ) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+}
+
 async function buildHeap() {
     for (let i = heapSize - 1; i > 0; i -= 2) {
         const parentIdx = Math.floor( ( i - 1 ) / 2 );
         const siblingIdx = i % 2 === 0 ? i - 1 : i + 1;
-        await compare(i, parentIdx, siblingIdx); 
+        await compare(i, parentIdx, siblingIdx);
+        if ( algoStatus === "paused" ) await pause();
     }
     algoStatus = "stopped";
 }
 
-
+var pauseControllerObj;
 function initGui() {
 
     const gui = new GUI();
+    gui.name = "gui";
 
     const param = {
         'num levels': 4,
         'palette': 'viridis',
         'width': 5,
-        'textLineColor': "#ffffff",
-        'algo speed': 0.5
+        'txtColor': "#ffffff",
+        'lineColor': "#000000",
+        'algo speed': 1
     };
 
     gui.add( param, 'num levels', 2, 6, 1).onChange( function ( val ) {
@@ -338,17 +350,34 @@ function initGui() {
     gui.add( param, 'palette', Object.keys(colors), 'viridis' ).onChange( function ( val ) {
         colorFormat = val;
         levelColors = Array(numLevels).fill(0).map((_, i) => colors[colorFormat]((i + 1) / numLevels));
-        initHeap();
+        treeNodes.forEach(node => node.material.color = new THREE.Color(node.userData.level == 0xd3d3d3 ? 0xd3d3d3 : levelColors[node.userData.level]));
+        aryNodes.forEach(node => node.material.color = new THREE.Color(node.userData.level == 0xd3d3d3 ? 0xd3d3d3 : levelColors[node.userData.level]));
     }); 
 
-    gui.addColor( param, 'textLineColor' ).onChange( function ( val ) {
+    gui.addColor( param, 'txtColor' ).onChange( function ( val ) {
         val = val.replace('#', '');    
         val = "rgb(" + parseInt(val.substring(0, 2), 16).toString() + "," + 
                        parseInt(val.substring(2, 4), 16).toString() + "," + 
                        parseInt(val.substring(4, 6), 16).toString() + ")";
-        if (txtLineColor == val) return;
-        txtLineColor = val;
-        initHeap();
+        if (txtColor == val) return;
+        txtColor = val;
+
+        for ( let elem of heap ) {
+            for ( let format of [ 'tree', 'array' ]) {
+                const txtMesh = scene.getObjectByName( elem.toString() + '_' + format );
+                if ( txtMesh !== undefined) txtMesh.material[0].color = new THREE.Color(txtColor);
+            }
+        }
+    });
+
+    gui.addColor( param, 'lineColor' ).onChange( function ( val ) {
+        val = val.replace('#', '');    
+        val = "rgb(" + parseInt(val.substring(0, 2), 16).toString() + "," + 
+                       parseInt(val.substring(2, 4), 16).toString() + "," + 
+                       parseInt(val.substring(4, 6), 16).toString() + ")";
+        if (lineColor == val) return;
+        lineColor = val;
+        lines.forEach(line => line.material.color = new THREE.Color(lineColor));
     });
 
     var obj = { add:function(){ 
@@ -356,11 +385,28 @@ function initGui() {
                                     algoStatus = "running";
                                     buildHeap();
                                 }
-                            }};
+                            }
+              };
+
     gui.add(obj, 'add').name('build heap (bottom-up)');
 
-    gui.add( param, 'algo speed', 0.01, 1).onChange( async function ( val ) {
-        algoSpeed = 100 - val;
+    var pauseObj = { pauseObj:function(){ 
+        if (algoStatus === "running") {
+            algoStatus = "paused";
+            pauseControllerObj.name('resume execution');
+            pauseControllerObj.updateDisplay();
+        }else {
+            algoStatus = "running";
+            pauseControllerObj.name('pause  execution');
+            pauseControllerObj.updateDisplay();
+        }
+        
+    }};
+    pauseControllerObj = gui.add(pauseObj, 'pauseObj'); 
+    pauseControllerObj.name('pause execution');
+
+    gui.add( param, 'algo speed', 0.01, 4).onChange( async function ( val ) {
+        algoSpeed = 1/val;
     });
 }
 
