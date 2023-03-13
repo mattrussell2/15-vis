@@ -231,7 +231,7 @@ const perp = (p1, p2) => {
     const x = p1.x + (p2.x - p1.x) / 2;
     const y = p1.y + (p2.y - p1.y) / 2;
     const dist = Math.sqrt( Math.pow( p2.x - p1.x, 2 ) + Math.pow( p2.y - p1.y, 2 ) );
-    const ratio = boxDim * 2 / dist;
+    const ratio = boxDim * 3 / dist;
     const newX = x + (p2.y - p1.y) * ratio;
     const newY = y - (p2.x - p1.x) * ratio;
     return new THREE.Vector2(newX, newY);
@@ -264,6 +264,13 @@ async function swap(childIdx, parentIdx) {
                                                             
 }
 
+async function reHeapDown( parentIdx ) {
+    const leftIdx = 2 * parentIdx + 1;
+    const rightIdx = 2 * parentIdx + 2;
+    if ( leftIdx >= heapSize ) return; // no children (leaf
+    await compare(leftIdx, parentIdx, rightIdx); //assume heap always complete. 
+}
+
 async function compare(currIdx, parentIdx, siblingIdx) {
     const currNum = heap[ currIdx + 1 ];
     const parentNum = heap[ parentIdx + 1 ];
@@ -273,16 +280,14 @@ async function compare(currIdx, parentIdx, siblingIdx) {
     await toggleNodes( [ siblingIdx ] );
     await toggleNodes( [ parentIdx ] );
     
-    if ( currNum < siblingNum ) {
-        if ( currNum < parentNum ) {
-            await toggleNodes( [ currIdx, parentIdx ] );
-            await swap(currIdx, parentIdx);
-        }
-    }else {
-        if ( siblingNum < parentNum ) {
-            await toggleNodes( [ siblingIdx, parentIdx ] );
-            await swap(siblingIdx, parentIdx);
-        }
+    if ( currNum < siblingNum && currNum < parentNum ) {
+        await toggleNodes( [ currIdx, parentIdx ] );
+        await swap(currIdx, parentIdx);
+        await reHeapDown( currIdx );
+    }else if ( siblingNum < parentNum && siblingNum < parentNum ) {
+        await toggleNodes( [ siblingIdx, parentIdx ] );
+        await swap(siblingIdx, parentIdx);
+        await reHeapDown( siblingIdx );
     }
 }
 
