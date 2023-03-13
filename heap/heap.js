@@ -45,9 +45,9 @@ var colorFormat = 'viridis';
 const treeXStart = 0;
 const treeYStart = 100;
 const aryY = -100;
-const aryWidth = frustumSize * aspect * .9; 
+const maxAryWidth = frustumSize * aspect * .9; 
 const textDeltaZ = 5; // shift text forward so visible
-const boxZ = 0;       // z location of the boxes
+const boxZ = -100;    // z location of the boxes
 
 // modifable params - levels, number of elements, and colors / level in the heap, boxDim - size of x,y,z for box..
 var numLevels = 4;
@@ -56,16 +56,22 @@ var levelColors = Array(numLevels).fill(0).map((_, i) => colors[colorFormat]((i 
 var boxDim = 16;
 var lineColor = 0x000000;
 var txtColor = 0xffffff;
-var aryDeltaX = aryWidth / ( heapSize + 1 );
-var aryXStart = -aryWidth / 2 + aryDeltaX / 2;
-var textSize = 8;
-var textHeight = 5; 
+var aryDeltaX = maxAryWidth / ( heapSize + 1 );
+var aryXStart = -maxAryWidth / 2 + aryDeltaX / 2;
+
+while ( aryDeltaX < boxDim ) {
+    boxDim *= 0.75; 
+}
+
+var textSize = boxDim / 2;
+var textHeight = textSize - 1; 
 var algoSpeed = 1;
 var algoStatus = 'stopped';
+var pauseControllerObj;
 
 // Define a function to create a single node
-function createNode(x, y, z, level) {
-    const geometry = new THREE.BoxGeometry(boxDim, boxDim, boxDim);
+function createNode( x, y, z, level ) {
+    const geometry = new THREE.BoxGeometry(boxDim, boxDim, 1);
     const material = new THREE.MeshStandardMaterial({   
                                                         color: level == 0xd3d3d3 ? level : levelColors[level], 
                                                         opacity: 1, 
@@ -109,30 +115,50 @@ function createTextMesh( num, x, y, z, format ) {
     let nstr = num.toString();
     if (num < 10) nstr = '0' + nstr; // pad with 0
 
+    let tsize = textSize;
+    let theight = textHeight;
+    let tcolor = txtColor;
+    let bevelThick = 0.5;
+    let bevelSize = 0.5;
+    if ( format == "arrayNums" ) {
+        tsize /= 2;
+        theight /= 2;
+        tcolor = 0x000000;
+        bevelThick /= 2;
+        bevelSize /= 2;
+    }
+
     const textGeo = new TextGeometry( nstr, {
                                                 font: font,
-                                                size: textSize,
-                                                height: textHeight,
+                                                size: tsize,
+                                                height: theight,
                                                 curveSegments: 12,
                                                 bevelEnabled: true,
-                                                bevelThickness: 0.5,
-                                                bevelSize: 0.5,
+                                                bevelThickness: bevelThick,
+                                                bevelSize: bevelSize,
                                                 bevelOffset: 0,
                                                 bevelSegments: 5
                                             });
             
     textGeo.computeBoundingBox();
-    const textMat = [ new THREE.MeshBasicMaterial( { color: txtColor } ), new THREE.MeshBasicMaterial( { color: lineColor } ) ] ;
+    const textMat = [ new THREE.MeshBasicMaterial( { color: tcolor } ), new THREE.MeshBasicMaterial( { color: lineColor } ) ] ;
     const textMesh = new THREE.Mesh( textGeo, textMat );
     const textCenter = textGeo.boundingBox.getCenter( new THREE.Vector3() );
-    textMesh.position.set( x - textCenter.x, y - textCenter.y, z + textDeltaZ );
+
+    let textY = format == "arrayNums" ? y : y - textCenter.y;
+
+    textMesh.position.set( x - textCenter.x, textY, z + textDeltaZ );
     textMesh.name = num.toString() + '_' + format;
     scene.add( textMesh );
+
     return textMesh;
 }
 
 // given a node, toggles the box around it; assumes box is first child
-const toggleBox = ( node ) => node.children[0].visible = !node.children[0].visible;
+const toggleBoxes = ( nodeIdx ) => {
+    treeNodes[ nodeIdx ].children[0].visible = !treeNodes[ nodeIdx ].children[0].visible;
+    aryNodes[ nodeIdx + 1 ].children[0].visible = !aryNodes[nodeIdx + 1].children[0].visible;
+}
 
 var heap = [];
 var treeNodes = [];
@@ -160,15 +186,16 @@ function initHeap() {
     heap = [ "\u00D8" ];
     while ( heap.length < heapSize + 1 ) {
         const r = Math.floor( Math.random() * 100 );
-        if ( heap.indexOf(r) === -1 ) heap.push(r);
+        if ( heap.indexOf(r) === -1 ) heap.push( r );
     }
     
     // initialize the nodes for the tree and array
-    treeNodes = [ createNode( treeXStart, treeYStart, boxZ, 0, false ) ];
-    aryNodes  = [ createNode( aryXStart, aryY, boxZ, 0xd3d3d3, true ) ]; // null box color
+    treeNodes = [ createNode( treeXStart, treeYStart, boxZ, 0 ) ];
+    aryNodes  = [ createNode( aryXStart, aryY, boxZ, 0xd3d3d3 ) ]; // null box color
 
     createTextMesh( heap[1], treeXStart, treeYStart, boxZ, 'tree' );
     createTextMesh( heap[0], aryXStart, aryY, boxZ, 'array' );
+    createTextMesh( 0, aryXStart, aryY + boxDim / 2, boxZ, 'arrayNums' );
 
     for (let i = 1; i < heapSize + 1; i++) {
         
@@ -180,7 +207,7 @@ function initHeap() {
 
             const treeX = parent.position.x + (isLeft ? -100 : 100) * Math.pow(0.5, levelNum - 1);
             const treeY = parent.position.y - 30;
-            const treeNode = createNode( treeX, treeY, boxZ, levelNum, false);
+            const treeNode = createNode( treeX, treeY, boxZ, levelNum );
             treeNodes.push(treeNode);
 
             createTextMesh( heap[i + 1], treeX, treeY, boxZ, 'tree' );
@@ -188,10 +215,11 @@ function initHeap() {
 
         const levelNum = Math.floor( Math.log2( i ) );
         const aryX = aryXStart + i * aryDeltaX;
-        const aryNodeLo = createNode( aryX, aryY, boxZ, levelNum, true);
+        const aryNodeLo = createNode( aryX, aryY, boxZ, levelNum );
         aryNodes.push(aryNodeLo);
 
-        createTextMesh( heap[i], aryX, aryY, boxZ, 'array');
+        createTextMesh( heap[i], aryX, aryY, boxZ, 'array' );
+        createTextMesh( i, aryX, aryY + boxDim / 2, boxZ, 'arrayNums' );
 
     }
 
@@ -220,24 +248,35 @@ function initHeap() {
 
 async function toggleNodes(nodeList, onTime=2000*algoSpeed, offTime=300*algoSpeed) {
     if ( algoStatus === "paused" ) await pause();
-    nodeList.forEach(nodeIdx => toggleBox(treeNodes[nodeIdx]));
+    nodeList.forEach(nodeIdx => toggleBoxes(nodeIdx));
     await new Promise((resolve) => setTimeout(resolve, onTime));
     if ( algoStatus === "paused" ) await pause();
-    nodeList.forEach(nodeIdx => toggleBox(treeNodes[nodeIdx]));
+    nodeList.forEach(nodeIdx => toggleBoxes(nodeIdx));
     await new Promise((resolve) => setTimeout(resolve, offTime));
 }
 
-
-// given two points, find a point perpendicular to the line between them
-// that is a distance of 50 from the first point
+// given two points, return a point that is d along a vector perpendicular to the line formed by the original two points
+// where d is half the distance between p1 and p2
 const perp = (p1, p2) => {
-    const x = p1.x + (p2.x - p1.x) / 2;
-    const y = p1.y + (p2.y - p1.y) / 2;
-    const dist = Math.sqrt( Math.pow( p2.x - p1.x, 2 ) + Math.pow( p2.y - p1.y, 2 ) );
-    const ratio = boxDim * 3 / dist;
-    const newX = x + (p2.y - p1.y) * ratio;
-    const newY = y - (p2.x - p1.x) * ratio;
-    return new THREE.Vector2(newX, newY);
+    const d = Math.sqrt( Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2) );
+    const midP = new THREE.Vector2( (p1.x + p2.x) / 2, (p1.y + p2.y) / 2);
+    let perpVec; //= new THREE.Vector2( p1.y - p2.y, p2.x - p1.x );
+    if ( p1.x > p2.x ) 
+        perpVec = new THREE.Vector2( p2.y - p1.y, p1.x - p2.x );
+    else 
+        perpVec = new THREE.Vector2( p1.y - p2.y, p2.x - p1.x );
+    perpVec.normalize().multiplyScalar(d);
+    return midP.add(perpVec);
+}
+
+const tweenSwap = ( obj1 , obj2, scale = 1 ) => {
+    const bezP = perp(obj1.position, obj2.position);
+    for ( const [a, b] of [ [obj1, obj2], [obj2, obj1] ] ) {
+        new TWEEN.Tween(a.position).to( {
+            x: [ bezP.x * scale, b.position.x ], 
+            y: [ bezP.y * scale, b.position.y ]
+        }, 1000).interpolation(TWEEN.Interpolation.Bezier).start();
+    }
 }
 
 async function swap(childIdx, parentIdx) {
@@ -247,21 +286,13 @@ async function swap(childIdx, parentIdx) {
 
     const childTreeText = scene.getObjectByName(numChild.toString() + "_tree");
     const parentTreeText = scene.getObjectByName(numParent.toString() + "_tree");
-    
-    const p1 = perp(childTreeText.position, parentTreeText.position);
-    const p2 = perp(parentTreeText.position, childTreeText.position);
+   
+    tweenSwap(childTreeText, parentTreeText);
 
-    const tweenDown = new TWEEN.Tween(childTreeText.position).to( {
-                                                                    x: [ p1.x, parentTreeText.position.x ], 
-                                                                    y: [ p1.x, parentTreeText.position.y ]
-                                                                 }, 1000)
-                                                            .interpolation(TWEEN.Interpolation.Bezier).start();
+    const childAryText = scene.getObjectByName(numChild.toString() + "_array");
+    const parentAryText = scene.getObjectByName(numParent.toString() + "_array");
+    tweenSwap(parentAryText, childAryText, 0.25);
 
-    const tweenUp = new TWEEN.Tween(parentTreeText.position).to( {
-                                                                    x: [ p2.x, childTreeText.position.x ], 
-                                                                    y: [ p2.x, childTreeText.position.y ]
-                                                                 }, 1000)
-                                                            .interpolation(TWEEN.Interpolation.Bezier).start();
     heap[ childIdx + 1 ] = numParent;
     heap[ parentIdx + 1 ] = numChild;
                                                             
@@ -310,7 +341,6 @@ async function buildHeap() {
     algoStatus = "stopped";
 }
 
-var pauseControllerObj;
 function initGui() {
 
     const gui = new GUI();
@@ -326,24 +356,28 @@ function initGui() {
     };
 
     gui.add( param, 'num levels', 2, 6, 1).onChange( function ( val ) {
-        if (numLevels == val) return;
+        if (numLevels == val || algoStatus !== "stopped" ) return;
         numLevels = val;
+
+        boxDim = 16; // always reset it
+
+        // heap is about to change, so remove old heap objects
+        for ( let i of Array(heapSize + 1).keys()) {
+            scene.remove( scene.getObjectByName( i.toString() + '_arrayNums' ) );
+        }
+
         heapSize = Math.pow(2, numLevels) - 1;
         levelColors = Array(numLevels).fill(0).map((_, i) => colors[colorFormat]((i + 1) / numLevels));
-        aryDeltaX = aryWidth / ( heapSize + 1 );
-        aryXStart = -aryWidth / 2 + aryDeltaX / 2;
         
-        while (aryDeltaX > boxDim * 2 && val >= 4) {
-            boxDim += 5;
-            textSize += 3;
-            textHeight += 0.1;
+        aryDeltaX = maxAryWidth / ( heapSize + 1 );
+        aryXStart = -maxAryWidth / 2 + aryDeltaX / 2;
+
+        while ( aryDeltaX < boxDim ) {
+            boxDim *= 0.75; 
         }
-        
-        while (aryDeltaX < boxDim) {
-            boxDim -= 5;
-            textSize -= 3;
-            textHeight -= 0.1;
-        }
+        textSize = boxDim / 2;
+        textHeight = textSize - 1; 
+       
         initHeap();
     });
 
@@ -395,7 +429,7 @@ function initGui() {
             algoStatus = "paused";
             pauseControllerObj.name('resume execution');
             pauseControllerObj.updateDisplay();
-        }else {
+        } else {
             algoStatus = "running";
             pauseControllerObj.name('pause  execution');
             pauseControllerObj.updateDisplay();
@@ -410,7 +444,7 @@ function initGui() {
     });
 }
 
-
+console.log("HERE");
 initGui();
 initHeap();
 
