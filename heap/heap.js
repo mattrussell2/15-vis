@@ -217,51 +217,6 @@ const LE = '\u2264';
 const GE = '\u2265';
 const HUH = '\u003F';
 
-var battleBox;
-function initBattleBox() {
-    scene.remove(battleBox);
-
-    const battleBoxYSpace = ( aryY - treeNodes[treeNodes.length - 1].position.y ) + boxDim * 3;
-    const battleBoxY = (treeNodes[treeNodes.length - 1].position.y + aryY ) / 2;
-    const battleBoxGeo = new THREE.BoxGeometry( 100, battleBoxYSpace, 1 );
-    const battleBoxMat = new THREE.MeshStandardMaterial( { color: 0x000000, roughness: 0.2, metalness: 0.3 } );
-    const bbox = new THREE.Mesh( battleBoxGeo, battleBoxMat );
-    bbox.position.set( 0, battleBoxY, boxZ + 5 );
-
-    const bboxNode1 = createNode( 0, -33, battleBoxY, boxZ, 0xd3d3d3 );
-    const bboxNode2 = createNode( 0, 0, battleBoxY, boxZ, 0xd3d3d3 );
-    const bboxNode3 = createNode( 0, 33, battleBoxY, boxZ, 0xd3d3d3 );
-    
-    const bboxTxt1 = createTextMesh( 0, -33, battleBoxY, boxZ, 'battle', false );
-    bboxTxt1.visible = false;
-    bboxTxt1.name = 'bboxLeft';
-    const bboxTxt2 = createTextMesh( HUH, 0, battleBoxY, boxZ, 'battle', false );
-    bboxTxt2.name = 'bboxMiddle';
-    const bboxTxt3 = createTextMesh( 0, 33, battleBoxY, boxZ, 'battle', false );
-    bboxTxt3.name = 'bboxRight';  
-    bboxTxt3.visible = false;
-    
-    battleBox = new THREE.Group();
-    battleBox.add(bbox);
-    battleBox.add(bboxNode1);
-    battleBox.add(bboxNode2);
-    battleBox.add(bboxNode3);
-    battleBox.add(bboxTxt1);
-    battleBox.add(bboxTxt2);
-    battleBox.add(bboxTxt3);
-    
-    scene.add(battleBox);
-}
-
-function replaceBBox(value, name) {
-    battleBox.remove(battleBox.getObjectByName(name));
-    const bboxY = (treeNodes[treeNodes.length - 1].position.y + aryY ) / 2;
-    const bboxX = name === 'bboxLeft' ? -33 : name === 'bboxRight' ? 33 : 0;
-    const bboxTxt = createTextMesh( value, bboxX, bboxY, boxZ, 'battle', false );
-    bboxTxt.name = name;
-    battleBox.add( bboxTxt );
-}
-
 async function toggleNodes(nodeList, onTime=4000*algoSpeed, offTime=300*algoSpeed) {
     nodeList.forEach(nodeIdx => toggleBox(treeNodes[nodeIdx]));
     await new Promise((resolve) => setTimeout(resolve, onTime));
@@ -313,42 +268,22 @@ async function compare(currIdx, parentIdx, siblingIdx) {
     const currNum = heap[ currIdx + 1 ];
     const parentNum = heap[ parentIdx + 1 ];
     const siblingNum = heap[ siblingIdx + 1 ];
-
-    const firstBox = currIdx % 2 !== 0 ? 'bboxLeft' : 'bboxRight';
-    const secondBox = currIdx % 2 !== 0 ? 'bboxRight' : 'bboxLeft';
     
-    let symbol = currNum < siblingNum && firstBox === 'bboxLeft' || siblingNum < currNum && firstBox === 'bboxRight' ? LESS : GREATER;
-    const newBox = symbol === LESS  ? 'bboxRight' : 'bboxLeft';
-   
-    replaceBBox(currNum, firstBox);
     await toggleNodes( [ currIdx ] );
-    replaceBBox(siblingNum, secondBox);
-    replaceBBox(symbol, 'bboxMiddle');
     await toggleNodes( [ siblingIdx ] );
-    replaceBBox(HUH, 'bboxMiddle');
-    replaceBBox(parentNum, newBox);
     await toggleNodes( [ parentIdx ] );
     
     if ( currNum < siblingNum ) {
         if ( currNum < parentNum ) {
-            replaceBBox(firstBox == 'bboxLeft' ? LESS : GREATER, 'bboxMiddle');
             await toggleNodes( [ currIdx, parentIdx ] );
             await swap(currIdx, parentIdx);
-        }else {
-            replaceBBox(GREATER, 'bboxMiddle');
         }
     }else {
         if ( siblingNum < parentNum ) {
-            replaceBBox(firstBox == 'bboxRight' ? LESS : GREATER, 'bboxMiddle');
             await toggleNodes( [ siblingIdx, parentIdx ] );
             await swap(siblingIdx, parentIdx);
-        }else {
-            replaceBBox(LESS, 'bboxMiddle');
         }
     }
-    replaceBBox(HUH, 'bboxMiddle');
-    battleBox.getObjectByName('bboxLeft').visible = false;
-    battleBox.getObjectByName('bboxRight').visible = false;
 }
 
 async function buildHeap() {
@@ -393,14 +328,12 @@ function initGui() {
             textHeight -= 0.1;
         }
         initHeap();
-        initBattleBox();
     });
 
     gui.add( param, 'palette', Object.keys(colors), 'viridis' ).onChange( function ( val ) {
         colorFormat = val;
         levelColors = Array(numLevels).fill(0).map((_, i) => colors[colorFormat]((i + 1) / numLevels));
         initHeap();
-        initBattleBox();
     }); 
 
     gui.addColor( param, 'textLineColor' ).onChange( function ( val ) {
@@ -411,7 +344,6 @@ function initGui() {
         if (txtLineColor == val) return;
         txtLineColor = val;
         initHeap();
-        initBattleBox();
     });
 
     var obj = { add:function(){ 
@@ -430,7 +362,6 @@ function initGui() {
 
 initGui();
 initHeap();
-initBattleBox();
 
 // Render the scene
 function render() {
