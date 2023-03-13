@@ -6,8 +6,8 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { Line2 } from 'three/addons/lines/Line2.js';
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
-
-import { TWEEN } from 'https://unpkg.com/three@0.139.0/examples/jsm/libs/tween.module.min.js';
+import { Interaction } from './three.interaction.js/src/index.js';
+import { TWEEN } from 'tween';
 
 const font = new FontLoader().parse( fontData );
 const frustumSize = 250;
@@ -28,6 +28,8 @@ const renderer = new THREE.WebGLRenderer( { antialias: true } );
 renderer.setPixelRatio( window.devicePixelRatio );
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
+
+const interaction = new Interaction(renderer, scene, camera);
 
 const colors = { 
     'viridis': d3.interpolateViridis, 
@@ -83,7 +85,7 @@ function createNode( x, y, z, level ) {
 
     const node = new THREE.Mesh( geometry, material );
     node.position.set(x, y, z);
-
+    
     // selector box for the node - hide at first
     const offset = boxDim / 2;
     const zPos = boxZ + 5;
@@ -105,7 +107,7 @@ function createNode( x, y, z, level ) {
     node.userData.level = level;
 
     scene.add( node );
-
+    
     return node;
 }
 
@@ -197,9 +199,9 @@ function initHeap() {
     createTextMesh( heap[0], aryXStart, aryY, boxZ, 'array' );
     createTextMesh( 0, aryXStart, aryY + boxDim / 2, boxZ, 'arrayNums' );
 
-    for (let i = 1; i < heapSize + 1; i++) {
+    for ( let i = 1; i < heapSize + 1; i++ ) {
         
-        if (i < heapSize) {
+        if ( i < heapSize ) {
             const levelNum = Math.floor( Math.log2( i + 1 ) );
             const parentIndex = Math.floor( (i - 1) / 2 );
             const parent = treeNodes[ parentIndex ];
@@ -241,7 +243,7 @@ function initHeap() {
         const line = new Line2( geo, mat );
         
         scene.add( line );
-        lines.push( line )
+        lines.push( line );
     }
     
 }
@@ -286,7 +288,6 @@ async function swap(childIdx, parentIdx) {
 
     const childTreeText = scene.getObjectByName(numChild.toString() + "_tree");
     const parentTreeText = scene.getObjectByName(numParent.toString() + "_tree");
-   
     tweenSwap(childTreeText, parentTreeText);
 
     const childAryText = scene.getObjectByName(numChild.toString() + "_array");
@@ -341,6 +342,30 @@ async function buildHeap() {
     algoStatus = "stopped";
 }
 
+function makeClicky(obj) {
+    obj.cursor = "pointer";
+    obj.on('click', function() {
+        console.log("clicked");
+    });
+    // determine which box the object is in; make it's highlight box on. 
+    // if you've clicked two, swap them. 
+    // validate that the swap is correct. 
+}
+
+async function tryBuild() {
+    for ( let elem of heap ) {
+        for ( let format of [ 'tree', 'array' ]) {
+           const node = scene.getObjectByName( elem.toString() + '_' + format );
+           if ( node === undefined ) continue;
+           makeClicky(node);
+        }
+    }
+    treeNodes.forEach( node => makeClicky(node) );
+    aryNodes.forEach( node => makeClicky(node) );
+
+
+}
+
 function initGui() {
 
     const gui = new GUI();
@@ -377,7 +402,7 @@ function initGui() {
         }
         textSize = boxDim / 2;
         textHeight = textSize - 1; 
-       
+        
         initHeap();
     });
 
@@ -442,9 +467,13 @@ function initGui() {
     gui.add( param, 'algo speed', 0.01, 4).onChange( async function ( val ) {
         algoSpeed = 1/val;
     });
+
+    var tryObj = { tryBuild:function() { tryBuild(); }
+    };
+
+    gui.add(tryObj, 'tryBuild').name('try building heap on your own!');
 }
 
-console.log("HERE");
 initGui();
 initHeap();
 
