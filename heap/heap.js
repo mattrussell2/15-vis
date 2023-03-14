@@ -456,6 +456,27 @@ function applyToText(fn) {
     }
 }
 
+async function pausePlay(obj, fn, str) {
+    console.log(algoStatus);
+    if (algoStatus === "stopped") {
+        algoStatus = "running";
+        obj.name('pause execution');
+        obj.updateDisplay();
+        await fn();
+        obj.name(str);
+        obj.updateDisplay();
+    } else if (algoStatus === "running") {
+        algoStatus = "paused";
+        obj.name('resume execution');
+        obj.updateDisplay();
+    } else {
+        algoStatus = "running";
+        obj.name('pause execution');
+        obj.updateDisplay();
+    }
+}
+
+
 function initGui() {
 
     const gui = new GUI();
@@ -463,7 +484,7 @@ function initGui() {
 
     const param = {
         'num levels': 4,
-        'palette': 'viridis',
+        'color palette': 'viridis',
         'width': 5,
         'txtColor': "#ffffff",
         'lineColor': "#000000",
@@ -496,70 +517,24 @@ function initGui() {
         initHeap();
     });
 
-    gui.add( param, 'palette', Object.keys(colors), 'viridis' ).onChange( function ( val ) {
+    gui.add( param, 'color palette', Object.keys(colors), 'viridis' ).onChange( function ( val ) {
         colorFormat = val;
         levelColors = Array(numLevels).fill(0).map((_, i) => colors[colorFormat]((i + 1) / numLevels));
         applyToNodes((node) => node.material.color = new THREE.Color(node.userData.level == 0xd3d3d3 ? 0xd3d3d3 : levelColors[node.userData.level]));
     }); 
 
-    gui.addColor( param, 'txtColor' ).onChange( function ( val ) {
-        val = val.replace('#', '');    
-        val = "rgb(" + parseInt(val.substring(0, 2), 16).toString() + "," + 
-                       parseInt(val.substring(2, 4), 16).toString() + "," + 
-                       parseInt(val.substring(4, 6), 16).toString() + ")";
-        if (txtColor == val) return;
-        txtColor = val;
+    var obj = { 
+                add: () => { pausePlay(buildHeapCtrl, buildHeap, 'build heap (bottom-up)'); }, 
+                tryBuild: () => { tryBuild(); },
+    };
 
-        for ( let elem of heap ) {
-            for ( let format of [ 'tree', 'array' ]) {
-                const txtMesh = scene.getObjectByName( elem.toString() + '_' + format );
-                if ( txtMesh !== undefined) txtMesh.material[0].color = new THREE.Color(txtColor);
-            }
-        }
-    });
-
-    gui.addColor( param, 'lineColor' ).onChange( function ( val ) {
-        val = val.replace('#', '');    
-        val = "rgb(" + parseInt(val.substring(0, 2), 16).toString() + "," + 
-                       parseInt(val.substring(2, 4), 16).toString() + "," + 
-                       parseInt(val.substring(4, 6), 16).toString() + ")";
-        if (lineColor == val) return;
-        lineColor = val;
-        lines.forEach(line => line.material.color = new THREE.Color(lineColor));
-    });
-
-    var obj = { add:function(){ 
-                                if (algoStatus === "stopped") {
-                                    algoStatus = "running";
-                                    buildHeap();
-                                }
-                            }
-              };
-
-    gui.add(obj, 'add').name('build heap (bottom-up)');
-
-    var pauseObj = { pauseObj:function(){ 
-        if (algoStatus === "running") {
-            algoStatus = "paused";
-            pauseControllerObj.name('resume execution');
-            pauseControllerObj.updateDisplay();
-        } else {
-            algoStatus = "running";
-            pauseControllerObj.name('pause  execution');
-            pauseControllerObj.updateDisplay();
-        }
-        
-    }};
-    pauseControllerObj = gui.add(pauseObj, 'pauseObj'); 
-    pauseControllerObj.name('pause execution');
-
+    const buildFolder = gui.addFolder('Build Heap')
+    buildFolder.add(obj, 'tryBuild').name('try to build a heap on your own!');
+    const buildHeapCtrl = buildFolder.add(obj, 'add').name('build heap (bottom-up)');
+    buildFolder.open();
     gui.add( param, 'algo speed', 0.01, 4).onChange( function ( val ) {
         algoSpeed = 1/val;
     });
-
-    var tryObj = { tryBuild: function() { tryBuild(); } };
-
-    gui.add(tryObj, 'tryBuild').name('try building heap on your own!');
 }
 
 initGui();
