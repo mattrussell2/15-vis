@@ -8,6 +8,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import { Interaction } from './three.interaction.js/src/index.js';
 import { TWEEN } from 'tween';
+import _ from 'underscore';
 
 const font = new FontLoader().parse( fontData );
 const frustumSize = 250;
@@ -70,6 +71,10 @@ var textHeight = textSize - 1;
 var algoSpeed = 1;
 var algoStatus = 'stopped';
 var pauseControllerObj;
+
+// 
+var swaps = [];
+var swapIdx = 0;
 
 // Define a function to create a single node
 function createNode( x, y, z, level, i, format ) {
@@ -155,6 +160,11 @@ function createTextMesh( num, x, y, z, i, format ) {
     scene.add( textMesh );
 
     return textMesh;
+}
+
+const toggleBoxColors = ( nodeIdx, color ) => {
+    treeNodes[ nodeIdx - 1 ].children[0].material.color.set( color );
+    aryNodes[ nodeIdx ].children[0].material.color.set( color );
 }
 
 // given a node, toggles the box around it; assumes box is first child
@@ -286,9 +296,15 @@ const tweenSwap = ( obj1 , obj2, scale = 1 ) => {
     }
 }
 
-async function swap( childIdx, parentIdx, quiet=false ) {
+function sortNumbers(a, b) {
+    return a > b ? 1 : b > a ? -1 : 0;
+}
 
-    swaps.push( [ childIdx, parentIdx ] );
+async function swap( childIdx, parentIdx, quiet=false, pc=true ) {
+    let indices = [ childIdx, parentIdx ];
+    indices.sort(sortNumbers);
+    
+    if ( pc ) swaps.push( indices );
 
     if ( !quiet ) await toggleNodes( [ childIdx, parentIdx ] );
 
@@ -347,10 +363,9 @@ async function pause() {
     }
 }
 
-var swaps = [];
 async function buildHeap( quiet=false ) {
     swaps = [];
-    const origHeap = heap;
+    const origHeap = [...heap];
     for (let i = heapSize; i > 1; i -= 2) {
         const parentIdx = Math.floor( i / 2 );
         const siblingIdx = i % 2 === 0 ? i + 1 : i - 1;
@@ -359,46 +374,62 @@ async function buildHeap( quiet=false ) {
     }
     if ( quiet ) heap = origHeap;
     algoStatus = "stopped";
-    return swaps;
 }
 
+
 var toggled = [];
+var numMistakes = 0;
 function makeClicky(obj) {
     obj.cursor = "pointer";
     obj.on('click', function() {
-        console.log(obj.userData.i, obj.name);
+        
         let i = obj.userData.i;
-        // if ( obj.name.includes("tree") ) {
-        //     i++;
-        // }
+        if ( obj.name.includes("tree") && !obj.name.includes("box") ) {
+            i++;
+        }
         
         const visible = toggleBoxes( i ); 
         if ( visible ) toggled.push( i );
         else toggled = toggled.filter( j => j != i );
 
         if ( toggled.length == 2 ) {
+            toggled.sort( sortNumbers );
             const [ i, j ] = toggled;
             
             // if a is not child of b or b not child of a, complain
-            if ( i != j / 2 && j != i / 2 ) {
+            if ( i * 2 !== j && ( i * 2 ) + 1 !== j ) {
                 alert("Invalid swap");
-                toggleBoxes( toggled[0] );
-                toggleBoxes( toggled[1] );
+                toggled.forEach( idx => toggleBoxes( idx ) );
                 toggled = [];
-                return;
+                numMistakes++;
+            } else {
+                const correct = swaps[swapIdx];
+                
+                if ( !_.isEqual(toggled, correct) ) {
+                    alert("Incorrect swap!");
+                    toggled.forEach( idx => toggleBoxes( idx ) );
+                    toggled = [];
+                    numMistakes++;
+                }else {
+                    toggled.forEach( idx => toggleBoxColors( idx, "green" ) );
+                    swap( toggled[1], toggled[0], false, false ); 
+                    toggled.forEach( idx => toggleBoxes( idx ) );
+                    swapIdx++;
+                    toggled = [];
+                }
             }
-            //swap( toggled[0], toggled[1], true );
+        }
+        if ( swapIdx === swaps.length ) {
+            if ( numMistakes === 0 ) alert("Perfect!");
+            if ( numMistakes === 1 ) alert("Nice Work! You made 1 mistake.");
+            if ( numMistakes > 1 && numMistakes < 4 ) alert("Finished! You made " + numMistakes + " mistakes.");
+            if ( numMistakes >= 4 ) alert("Finished! You made " + numMistakes + " mistakes. Try again!");
         }
     });
-    // determine which box the object is in; make it's highlight box on. 
-    // if you've clicked two, swap them. 
-    // validate that the swap is correct. 
-    console.log(obj.userData.i);
 }
 
 async function tryBuild() {
-    const swaps = await buildHeap( true );
-    console.log(swaps);
+    await buildHeap( true );
     for ( let elem of heap ) {
         for ( let format of [ 'tree', 'array' ]) {
            const node = scene.getObjectByName( elem.toString() + '_' + format );
@@ -408,7 +439,6 @@ async function tryBuild() {
     }
     treeNodes.forEach( node => makeClicky(node) );
     aryNodes.forEach( node => makeClicky(node) );
-
 
 }
 
@@ -514,7 +544,7 @@ function initGui() {
         algoSpeed = 1/val;
     });
 
-    var tryObj = { tryBuild:function() { tryBuild(); }
+    var tryObj = { tryBuild: function() { tryBuild(); }
     };
 
     gui.add(tryObj, 'tryBuild').name('try building heap on your own!');
