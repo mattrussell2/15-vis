@@ -72,7 +72,7 @@ var algoStatus = 'stopped';
 var pauseControllerObj;
 
 // Define a function to create a single node
-function createNode( x, y, z, level ) {
+function createNode( x, y, z, level, i, format ) {
     const geometry = new THREE.BoxGeometry(boxDim, boxDim, 1);
     const material = new THREE.MeshStandardMaterial({   
                                                         color: level == 0xd3d3d3 ? level : levelColors[level], 
@@ -105,15 +105,15 @@ function createNode( x, y, z, level ) {
     node.add( lineMesh );
 
     node.userData.level = level;
+    node.userData.i = i;
+    node.name = i.toString() + '_' + format + '_box_idx';
 
     scene.add( node );
     
     return node;
 }
 
-function createTextMesh( num, x, y, z, format ) {
-    // make text - although the text object is NOT a child of the node, it's
-    // convienent to create it here; add it to the scene. 
+function createTextMesh( num, x, y, z, i, format ) {
     let nstr = num.toString();
     if (num < 10) nstr = '0' + nstr; // pad with 0
 
@@ -151,6 +151,7 @@ function createTextMesh( num, x, y, z, format ) {
 
     textMesh.position.set( x - textCenter.x, textY, z + textDeltaZ );
     textMesh.name = num.toString() + '_' + format;
+    textMesh.userData.i = i;
     scene.add( textMesh );
 
     return textMesh;
@@ -158,8 +159,9 @@ function createTextMesh( num, x, y, z, format ) {
 
 // given a node, toggles the box around it; assumes box is first child
 const toggleBoxes = ( nodeIdx ) => {
-    treeNodes[ nodeIdx ].children[0].visible = !treeNodes[ nodeIdx ].children[0].visible;
-    aryNodes[ nodeIdx + 1 ].children[0].visible = !aryNodes[nodeIdx + 1].children[0].visible;
+    treeNodes[ nodeIdx - 1 ].children[0].visible = !treeNodes[ nodeIdx - 1 ].children[0].visible;
+    aryNodes[ nodeIdx ].children[0].visible = !aryNodes[ nodeIdx ].children[0].visible;
+    return treeNodes[ nodeIdx - 1 ].children[0].visible;
 }
 
 var heap = [];
@@ -191,14 +193,17 @@ function initHeap() {
         if ( heap.indexOf(r) === -1 ) heap.push( r );
     }
     
+    // clean this up ...
+
     // initialize the nodes for the tree and array
-    treeNodes = [ createNode( treeXStart, treeYStart, boxZ, 0 ) ];
-    aryNodes  = [ createNode( aryXStart, aryY, boxZ, 0xd3d3d3 ) ]; // null box color
+    treeNodes = [ createNode( treeXStart, treeYStart, boxZ, 0, 1, 'tree' ) ];
+    aryNodes  = [ createNode( aryXStart, aryY, boxZ, 0xd3d3d3, -1, 'array' ) ]; // null box color
 
-    createTextMesh( heap[1], treeXStart, treeYStart, boxZ, 'tree' );
-    createTextMesh( heap[0], aryXStart, aryY, boxZ, 'array' );
-    createTextMesh( 0, aryXStart, aryY + boxDim / 2, boxZ, 'arrayNums' );
+    createTextMesh( heap[1], treeXStart, treeYStart, boxZ, 0, 'tree' );
+    createTextMesh( heap[0], aryXStart, aryY, boxZ, 0, 'array' );
+    createTextMesh( 0, aryXStart, aryY + boxDim / 2, boxZ, 0, 'arrayNums' );
 
+   
     for ( let i = 1; i < heapSize + 1; i++ ) {
         
         if ( i < heapSize ) {
@@ -209,19 +214,19 @@ function initHeap() {
 
             const treeX = parent.position.x + (isLeft ? -100 : 100) * Math.pow(0.5, levelNum - 1);
             const treeY = parent.position.y - 30;
-            const treeNode = createNode( treeX, treeY, boxZ, levelNum );
-            treeNodes.push(treeNode);
+            const treeNode = createNode( treeX, treeY, boxZ, levelNum, i + 1, 'tree' );
+            treeNodes.push( treeNode );
 
-            createTextMesh( heap[i + 1], treeX, treeY, boxZ, 'tree' );
+            createTextMesh( heap[ i + 1 ], treeX, treeY, boxZ, i, 'tree' );
         }
 
         const levelNum = Math.floor( Math.log2( i ) );
         const aryX = aryXStart + i * aryDeltaX;
-        const aryNodeLo = createNode( aryX, aryY, boxZ, levelNum );
-        aryNodes.push(aryNodeLo);
+        const aryNodeLo = createNode( aryX, aryY, boxZ, levelNum, i, 'array' );
+        aryNodes.push( aryNodeLo );
 
-        createTextMesh( heap[i], aryX, aryY, boxZ, 'array' );
-        createTextMesh( i, aryX, aryY + boxDim / 2, boxZ, 'arrayNums' );
+        createTextMesh( heap[ i ], aryX, aryY, boxZ, i, 'array' );
+        createTextMesh( i, aryX, aryY + boxDim / 2, boxZ, i, 'arrayNums' );
 
     }
 
@@ -229,7 +234,7 @@ function initHeap() {
     for (let i = 1; i < heapSize; i++) {
         const levelNum = Math.floor( Math.log2( i + 1 ) );
         
-        const curr = treeNodes[i];
+        const curr = treeNodes[ i ];
         const parent = treeNodes[ Math.floor( ( i - 1 ) / 2 ) ];
         
         const geo = new LineGeometry();
@@ -250,11 +255,11 @@ function initHeap() {
 
 async function toggleNodes(nodeList, onTime=2000*algoSpeed, offTime=300*algoSpeed) {
     if ( algoStatus === "paused" ) await pause();
-    nodeList.forEach(nodeIdx => toggleBoxes(nodeIdx));
-    await new Promise((resolve) => setTimeout(resolve, onTime));
+    nodeList.forEach( nodeIdx => toggleBoxes( nodeIdx ) );
+    await new Promise( ( resolve ) => setTimeout( resolve, onTime ) );
     if ( algoStatus === "paused" ) await pause();
-    nodeList.forEach(nodeIdx => toggleBoxes(nodeIdx));
-    await new Promise((resolve) => setTimeout(resolve, offTime));
+    nodeList.forEach( nodeIdx => toggleBoxes( nodeIdx ) );
+    await new Promise( ( resolve ) => setTimeout( resolve, offTime ) );
 }
 
 // given two points, return a point that is d along a vector perpendicular to the line formed by the original two points
@@ -281,48 +286,58 @@ const tweenSwap = ( obj1 , obj2, scale = 1 ) => {
     }
 }
 
-async function swap(childIdx, parentIdx) {
+async function swap( childIdx, parentIdx, quiet=false ) {
 
-    const numChild = heap[ childIdx + 1 ];
-    const numParent = heap[ parentIdx + 1 ];
+    swaps.push( [ childIdx, parentIdx ] );
 
-    const childTreeText = scene.getObjectByName(numChild.toString() + "_tree");
-    const parentTreeText = scene.getObjectByName(numParent.toString() + "_tree");
-    tweenSwap(childTreeText, parentTreeText);
+    if ( !quiet ) await toggleNodes( [ childIdx, parentIdx ] );
 
-    const childAryText = scene.getObjectByName(numChild.toString() + "_array");
-    const parentAryText = scene.getObjectByName(numParent.toString() + "_array");
-    tweenSwap(parentAryText, childAryText, 0.25);
+    const numChild = heap[ childIdx ];
+    const numParent = heap[ parentIdx ];
 
-    heap[ childIdx + 1 ] = numParent;
-    heap[ parentIdx + 1 ] = numChild;
-                                                            
+    if ( !quiet ) {
+        const childTreeText = scene.getObjectByName(numChild.toString() + "_tree");
+        const parentTreeText = scene.getObjectByName(numParent.toString() + "_tree");
+        tweenSwap(childTreeText, parentTreeText);
+
+        const childAryText = scene.getObjectByName(numChild.toString() + "_array");
+        const parentAryText = scene.getObjectByName(numParent.toString() + "_array");
+        tweenSwap(parentAryText, childAryText, 0.25);
+
+        const tmp = childTreeText.userData.i;
+        childTreeText.userData.i = parentTreeText.userData.i;
+        parentTreeText.userData.i = tmp;
+    }
+
+    heap[ childIdx ] = numParent;
+    heap[ parentIdx ] = numChild;                                           
 }
 
-async function reHeapDown( parentIdx ) {
-    const leftIdx = 2 * parentIdx + 1;
-    const rightIdx = 2 * parentIdx + 2;
-    if ( leftIdx >= heapSize ) return; // no children (leaf) - assume heap always full.
-    await compare(leftIdx, parentIdx, rightIdx);
+async function reHeapDown( parentIdx, quiet=false ) {
+    if ( parentIdx <= 0 ) return; // root
+    const leftIdx = 2 * parentIdx;
+    const rightIdx = 2 * parentIdx + 1;
+    if ( leftIdx >= heapSize ) return; // no children (leaf) - assume heap always full. [TODO]
+    await compare(leftIdx, parentIdx, rightIdx, quiet);
 }
 
-async function compare(currIdx, parentIdx, siblingIdx) {
-    const currNum = heap[ currIdx + 1 ];
-    const parentNum = heap[ parentIdx + 1 ];
-    const siblingNum = heap[ siblingIdx + 1 ];
+async function compare( currIdx, parentIdx, siblingIdx, quiet=false ) {
+    const currNum = heap[ currIdx ];
+    const parentNum = heap[ parentIdx ];
+    const siblingNum = heap[ siblingIdx ];
     
-    await toggleNodes( [ currIdx ] );
-    await toggleNodes( [ siblingIdx ] );
-    await toggleNodes( [ parentIdx ] );
+    if ( !quiet ) {
+        await toggleNodes( [ currIdx ] );
+        await toggleNodes( [ siblingIdx ] );
+        await toggleNodes( [ parentIdx ] );
+    }
     
     if ( currNum < siblingNum && currNum < parentNum ) {
-        await toggleNodes( [ currIdx, parentIdx ] );
-        await swap(currIdx, parentIdx);
-        await reHeapDown( currIdx );
-    }else if ( siblingNum < parentNum && siblingNum < parentNum ) {
-        await toggleNodes( [ siblingIdx, parentIdx ] );
-        await swap(siblingIdx, parentIdx);
-        await reHeapDown( siblingIdx );
+        await swap( currIdx, parentIdx, quiet );
+        await reHeapDown( currIdx, quiet );
+    } else if ( siblingNum < parentNum && siblingNum < parentNum ) {
+        await swap( siblingIdx, parentIdx, quiet );
+        await reHeapDown( siblingIdx, quiet );
     }
 }
 
@@ -332,27 +347,58 @@ async function pause() {
     }
 }
 
-async function buildHeap() {
-    for (let i = heapSize - 1; i > 0; i -= 2) {
-        const parentIdx = Math.floor( ( i - 1 ) / 2 );
-        const siblingIdx = i % 2 === 0 ? i - 1 : i + 1;
-        await compare(i, parentIdx, siblingIdx);
+var swaps = [];
+async function buildHeap( quiet=false ) {
+    swaps = [];
+    const origHeap = heap;
+    for (let i = heapSize; i > 1; i -= 2) {
+        const parentIdx = Math.floor( i / 2 );
+        const siblingIdx = i % 2 === 0 ? i + 1 : i - 1;
+        await compare( i, parentIdx, siblingIdx, quiet );
         if ( algoStatus === "paused" ) await pause();
     }
+    if ( quiet ) heap = origHeap;
     algoStatus = "stopped";
+    return swaps;
 }
 
+var toggled = [];
 function makeClicky(obj) {
     obj.cursor = "pointer";
     obj.on('click', function() {
-        console.log("clicked");
+        console.log(obj.userData.i, obj.name);
+        let i = obj.userData.i;
+        // if ( obj.name.includes("tree") ) {
+        //     i++;
+        // }
+        
+        const visible = toggleBoxes( i ); 
+        if ( visible ) toggled.push( i );
+        else toggled = toggled.filter( j => j != i );
+
+        if ( toggled.length == 2 ) {
+            const [ i, j ] = toggled;
+            
+            // if a is not child of b or b not child of a, complain
+            if ( i != j / 2 && j != i / 2 ) {
+                alert("Invalid swap");
+                toggleBoxes( toggled[0] );
+                toggleBoxes( toggled[1] );
+                toggled = [];
+                return;
+            }
+            //swap( toggled[0], toggled[1], true );
+        }
     });
     // determine which box the object is in; make it's highlight box on. 
     // if you've clicked two, swap them. 
     // validate that the swap is correct. 
+    console.log(obj.userData.i);
 }
 
 async function tryBuild() {
+    const swaps = await buildHeap( true );
+    console.log(swaps);
     for ( let elem of heap ) {
         for ( let format of [ 'tree', 'array' ]) {
            const node = scene.getObjectByName( elem.toString() + '_' + format );
