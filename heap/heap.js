@@ -364,6 +364,7 @@ async function buildHeap( quiet=false ) {
         const siblingIdx = i % 2 === 0 ? i + 1 : i - 1;
         await compare( i, parentIdx, siblingIdx, quiet );
         if ( algoStatus === "paused" ) await pause();
+        console.log(i);
     }
     if ( quiet ) heap = origHeap;
     algoStatus = "stopped";
@@ -377,9 +378,12 @@ function makeClicky(obj) {
     obj.on('click', function() {
         
         let i = obj.userData.i;
+        console.log(obj.userData);
         if ( obj.name.includes("tree") && !obj.name.includes("box") ) {
             i++;
+            console.log("treeNode");
         }
+        console.log(i);
         
         const visible = toggleBoxes( i ); 
         if ( visible ) toggled.push( i );
@@ -424,6 +428,8 @@ function makeClicky(obj) {
 
 async function tryBuild() {
     await buildHeap( true );
+
+    console.log("HEAP BUILT")
 
     // make text objects clickable
     for ( let elem of heap ) {
