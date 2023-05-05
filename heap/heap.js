@@ -32,14 +32,6 @@ document.body.appendChild(renderer.domElement);
 
 const interaction = new Interaction(renderer, scene, camera);
 
-// params for tree and array node positions
-const treeXStart = 0;
-const treeYStart = 100;
-const aryY = -100;
-const maxAryWidth = frustumSize * aspect * .9; 
-const textDeltaZ = 5; // shift text forward so visible
-const boxZ = -100;    // z location of the boxes
-
 const colors = { 
     'viridis': d3.interpolateViridis, 
     'magma': d3.interpolateMagma,
@@ -51,6 +43,14 @@ const colors = {
     'rainbow': d3.interpolateRainbow
 }
 var colorFormat = 'viridis';
+
+// params for tree and array node positions
+const treeXStart = 0;
+const treeYStart = 100;
+const aryY = -100;
+const maxAryWidth = frustumSize * aspect * .9; 
+const textDeltaZ = 5; // shift text forward so visible
+const boxZ = -100;    // z location of the boxes
 
 // modifable params - levels, number of elements, and colors / level in the heap, boxDim - size of x,y,z for box..
 var numLevels = 4;
@@ -72,7 +72,7 @@ var algoSpeed = 1;
 var algoStatus = 'stopped';
 var pauseControllerObj;
 
-// holds swaps from pc solving heap algo. 
+// 
 var swaps = [];
 var swapIdx = 0;
 
@@ -127,7 +127,6 @@ function createTextMesh( num, x, y, z, i, format ) {
     let tcolor = txtColor;
     let bevelThick = 0.5;
     let bevelSize = 0.5;
-
     if ( format == "arrayNums" ) {
         tsize /= 2;
         theight /= 2;
@@ -147,7 +146,7 @@ function createTextMesh( num, x, y, z, i, format ) {
                                                 bevelOffset: 0,
                                                 bevelSegments: 5
                                             });
-    
+            
     textGeo.computeBoundingBox();
     const textMat = [ new THREE.MeshBasicMaterial( { color: tcolor } ), new THREE.MeshBasicMaterial( { color: lineColor } ) ] ;
     const textMesh = new THREE.Mesh( textGeo, textMat );
@@ -163,37 +162,40 @@ function createTextMesh( num, x, y, z, i, format ) {
     return textMesh;
 }
 
-
-const setBoxColors = ( nodeIdx, color ) => {
-    const treeBox = scene.getObjectByName( nodeIdx.toString() + '_tree_box_idx' ).children[ 0 ];
-    const aryBox = scene.getObjectByName( nodeIdx.toString() + '_array_box_idx' ).children[ 0 ];
-
-    treeBox.material.color.set( color );
-    aryBox.material.color.set( color );
+const toggleBoxColors = ( nodeIdx, color ) => {
+    treeNodes[ nodeIdx - 1 ].children[0].material.color.set( color );
+    aryNodes[ nodeIdx ].children[0].material.color.set( color );
 }
 
 // given a node, toggles the box around it; assumes box is first child
 const toggleBoxes = ( nodeIdx ) => {
-    const treeBox = scene.getObjectByName( (nodeIdx - 1).toString() + '_tree_box_idx' ).children[ 0 ];
-    const aryBox = scene.getObjectByName( nodeIdx.toString() + '_array_box_idx' ).children[ 0 ];
-
-    treeBox.visible = !treeBox.visible;
-    aryBox.visible = !aryBox.visible;
-    return treeBox.visible;
+    treeNodes[ nodeIdx - 1 ].children[0].visible = !treeNodes[ nodeIdx - 1 ].children[0].visible;
+    aryNodes[ nodeIdx ].children[0].visible = !aryNodes[ nodeIdx ].children[0].visible;
+    return treeNodes[ nodeIdx - 1 ].children[0].visible;
 }
 
 var heap = [];
+var treeNodes = [];
+var aryNodes = [];
 var lines = [];
 
 function initHeap() {
 
     // clear objects from scene
+    treeNodes.forEach(node => scene.remove(node));
+    aryNodes.forEach(node => scene.remove(node));
     lines.forEach(line => scene.remove(line));
+    treeNodes = [];
+    aryNodes = [];
     lines = [];
 
-    applyToNodes( scene.remove );
-    applyToText ( scene.remove );
-   
+    // clear text meshes
+    for ( let elem of heap ) {
+        for ( let format of [ 'tree', 'array' ]) {
+            scene.remove( scene.getObjectByName( elem.toString() + '_' + format ) );
+        }
+    }
+
     // actually create the heap.
     heap = [ "\u00D8" ];
     while ( heap.length < heapSize + 1 ) {
@@ -204,30 +206,35 @@ function initHeap() {
     // clean this up ...
 
     // initialize the nodes for the tree and array
-    createNode( treeXStart, treeYStart, boxZ, 0, 0, 'tree' );
-    createTextMesh( heap[ 1 ], treeXStart, treeYStart, boxZ, 0, 'tree' );
-    
-    createNode( aryXStart, aryY, boxZ, 0xd3d3d3, -1, 'array' ) ; // null box color
+    treeNodes = [ createNode( treeXStart, treeYStart, boxZ, 0, 1, 'tree' ) ];
+    aryNodes  = [ createNode( aryXStart, aryY, boxZ, 0xd3d3d3, -1, 'array' ) ]; // null box color
+
+    createTextMesh( heap[1], treeXStart, treeYStart, boxZ, 0, 'tree' );
     createTextMesh( heap[0], aryXStart, aryY, boxZ, 0, 'array' );
     createTextMesh( 0, aryXStart, aryY + boxDim / 2, boxZ, 0, 'arrayNums' );
+
    
     for ( let i = 1; i < heapSize + 1; i++ ) {
         
         if ( i < heapSize ) {
             const levelNum = Math.floor( Math.log2( i + 1 ) );
-            const parentIdx = Math.floor( (i - 1) / 2 );
-            const parent = scene.getObjectByName( parentIdx.toString() + '_tree_box_idx' );
+            const parentIndex = Math.floor( (i - 1) / 2 );
+            const parent = treeNodes[ parentIndex ];
             const isLeft = i % 2 !== 0;
 
             const treeX = parent.position.x + (isLeft ? -100 : 100) * Math.pow(0.5, levelNum - 1);
             const treeY = parent.position.y - 30;
-            createNode( treeX, treeY, boxZ, levelNum, i, 'tree' );
+            const treeNode = createNode( treeX, treeY, boxZ, levelNum, i + 1, 'tree' );
+            treeNodes.push( treeNode );
+
             createTextMesh( heap[ i + 1 ], treeX, treeY, boxZ, i, 'tree' );
         }
 
         const levelNum = Math.floor( Math.log2( i ) );
         const aryX = aryXStart + i * aryDeltaX;
-        createNode( aryX, aryY, boxZ, levelNum, i, 'array' );
+        const aryNodeLo = createNode( aryX, aryY, boxZ, levelNum, i, 'array' );
+        aryNodes.push( aryNodeLo );
+
         createTextMesh( heap[ i ], aryX, aryY, boxZ, i, 'array' );
         createTextMesh( i, aryX, aryY + boxDim / 2, boxZ, i, 'arrayNums' );
 
@@ -237,8 +244,8 @@ function initHeap() {
     for (let i = 1; i < heapSize; i++) {
         const levelNum = Math.floor( Math.log2( i + 1 ) );
         
-        const curr = scene.getObjectByName( i.toString() + '_tree_box_idx' );
-        const parent = scene.getObjectByName( Math.floor( ( i - 1 ) / 2 ).toString() + '_tree_box_idx' );
+        const curr = treeNodes[ i ];
+        const parent = treeNodes[ Math.floor( ( i - 1 ) / 2 ) ];
         
         const geo = new LineGeometry();
         geo.setPositions( [ ...curr.position.toArray(), ...parent.position.toArray() ] );
@@ -364,7 +371,6 @@ async function buildHeap( quiet=false ) {
         const siblingIdx = i % 2 === 0 ? i + 1 : i - 1;
         await compare( i, parentIdx, siblingIdx, quiet );
         if ( algoStatus === "paused" ) await pause();
-        console.log(i);
     }
     if ( quiet ) heap = origHeap;
     algoStatus = "stopped";
@@ -378,12 +384,9 @@ function makeClicky(obj) {
     obj.on('click', function() {
         
         let i = obj.userData.i;
-        console.log(obj.userData);
         if ( obj.name.includes("tree") && !obj.name.includes("box") ) {
             i++;
-            console.log("treeNode");
         }
-        console.log(i);
         
         const visible = toggleBoxes( i ); 
         if ( visible ) toggled.push( i );
@@ -407,8 +410,8 @@ function makeClicky(obj) {
                     toggled.forEach( idx => toggleBoxes( idx ) );
                     toggled = [];
                     numMistakes++;
-                } else {
-                    toggled.forEach( idx => setBoxColors( idx, "green" ) );
+                }else {
+                    toggled.forEach( idx => toggleBoxColors( idx, "green" ) );
                     swap( toggled[1], toggled[0], false, false ); 
                     toggled.forEach( idx => toggleBoxes( idx ) );
                     swapIdx++;
@@ -421,17 +424,12 @@ function makeClicky(obj) {
             if ( numMistakes === 1 ) alert("Nice Work! You made 1 mistake.");
             if ( numMistakes > 1 && numMistakes < 4 ) alert("Finished! You made " + numMistakes + " mistakes.");
             if ( numMistakes >= 4 ) alert("Finished! You made " + numMistakes + " mistakes. Try again!");
-            heap.filter((_, i) => i > 0).forEach( (_,i) => setBoxColors( i, "red") );
         }
     });
 }
 
 async function tryBuild() {
     await buildHeap( true );
-
-    console.log("HEAP BUILT")
-
-    // make text objects clickable
     for ( let elem of heap ) {
         for ( let format of [ 'tree', 'array' ]) {
            const node = scene.getObjectByName( elem.toString() + '_' + format );
@@ -439,49 +437,10 @@ async function tryBuild() {
            makeClicky(node);
         }
     }
-    applyToNodes(makeClicky);
+    treeNodes.forEach( node => makeClicky(node) );
+    aryNodes.forEach( node => makeClicky(node) );
 
 }
-
-function applyToNodes(fn) {
-    for ( let i = 1; i <= heapSize; i++ ) {
-        const treeNode = scene.getObjectByName( i.toString() + '_tree_box_idx' );
-        const aryNode = scene.getObjectByName( i.toString() + '_array_box_idx' );
-        if ( treeNode === undefined || aryNode === undefined ) continue;
-        fn( treeNode );
-        fn( aryNode );
-    }
-}
-
-function applyToText(fn) {
-    // clear text meshes
-    for ( let elem of heap ) {
-        for ( let format of [ 'tree', 'array' ]) {
-            fn( scene.getObjectByName( elem.toString() + '_' + format ) );
-        }
-    }
-}
-
-async function pausePlay(obj, fn, str) {
-    console.log(algoStatus);
-    if (algoStatus === "stopped") {
-        algoStatus = "running";
-        obj.name('pause execution');
-        obj.updateDisplay();
-        await fn();
-        obj.name(str);
-        obj.updateDisplay();
-    } else if (algoStatus === "running") {
-        algoStatus = "paused";
-        obj.name('resume execution');
-        obj.updateDisplay();
-    } else {
-        algoStatus = "running";
-        obj.name('pause execution');
-        obj.updateDisplay();
-    }
-}
-
 
 function initGui() {
 
@@ -490,7 +449,7 @@ function initGui() {
 
     const param = {
         'num levels': 4,
-        'color palette': 'viridis',
+        'palette': 'viridis',
         'width': 5,
         'txtColor': "#ffffff",
         'lineColor': "#000000",
@@ -523,24 +482,72 @@ function initGui() {
         initHeap();
     });
 
-    gui.add( param, 'color palette', Object.keys(colors), 'viridis' ).onChange( function ( val ) {
+    gui.add( param, 'palette', Object.keys(colors), 'viridis' ).onChange( function ( val ) {
         colorFormat = val;
         levelColors = Array(numLevels).fill(0).map((_, i) => colors[colorFormat]((i + 1) / numLevels));
-        applyToNodes((node) => node.material.color = new THREE.Color(node.userData.level == 0xd3d3d3 ? 0xd3d3d3 : levelColors[node.userData.level]));
+        treeNodes.forEach(node => node.material.color = new THREE.Color(node.userData.level == 0xd3d3d3 ? 0xd3d3d3 : levelColors[node.userData.level]));
+        aryNodes.forEach(node => node.material.color = new THREE.Color(node.userData.level == 0xd3d3d3 ? 0xd3d3d3 : levelColors[node.userData.level]));
     }); 
 
-    var obj = { 
-                add: () => { pausePlay(buildHeapCtrl, buildHeap, 'build heap (bottom-up)'); }, 
-                tryBuild: () => { tryBuild(); },
-    };
+    gui.addColor( param, 'txtColor' ).onChange( function ( val ) {
+        val = val.replace('#', '');    
+        val = "rgb(" + parseInt(val.substring(0, 2), 16).toString() + "," + 
+                       parseInt(val.substring(2, 4), 16).toString() + "," + 
+                       parseInt(val.substring(4, 6), 16).toString() + ")";
+        if (txtColor == val) return;
+        txtColor = val;
 
-    const buildFolder = gui.addFolder('Build Heap')
-    buildFolder.add(obj, 'tryBuild').name('try to build a heap on your own!');
-    const buildHeapCtrl = buildFolder.add(obj, 'add').name('build heap (bottom-up)');
-    buildFolder.open();
-    gui.add( param, 'algo speed', 0.01, 4).onChange( function ( val ) {
+        for ( let elem of heap ) {
+            for ( let format of [ 'tree', 'array' ]) {
+                const txtMesh = scene.getObjectByName( elem.toString() + '_' + format );
+                if ( txtMesh !== undefined) txtMesh.material[0].color = new THREE.Color(txtColor);
+            }
+        }
+    });
+
+    gui.addColor( param, 'lineColor' ).onChange( function ( val ) {
+        val = val.replace('#', '');    
+        val = "rgb(" + parseInt(val.substring(0, 2), 16).toString() + "," + 
+                       parseInt(val.substring(2, 4), 16).toString() + "," + 
+                       parseInt(val.substring(4, 6), 16).toString() + ")";
+        if (lineColor == val) return;
+        lineColor = val;
+        lines.forEach(line => line.material.color = new THREE.Color(lineColor));
+    });
+
+    var obj = { add:function(){ 
+                                if (algoStatus === "stopped") {
+                                    algoStatus = "running";
+                                    buildHeap();
+                                }
+                            }
+              };
+
+    gui.add(obj, 'add').name('build heap (bottom-up)');
+
+    var pauseObj = { pauseObj:function(){ 
+        if (algoStatus === "running") {
+            algoStatus = "paused";
+            pauseControllerObj.name('resume execution');
+            pauseControllerObj.updateDisplay();
+        } else {
+            algoStatus = "running";
+            pauseControllerObj.name('pause  execution');
+            pauseControllerObj.updateDisplay();
+        }
+        
+    }};
+    pauseControllerObj = gui.add(pauseObj, 'pauseObj'); 
+    pauseControllerObj.name('pause execution');
+
+    gui.add( param, 'algo speed', 0.01, 4).onChange( async function ( val ) {
         algoSpeed = 1/val;
     });
+
+    var tryObj = { tryBuild: function() { tryBuild(); }
+    };
+
+    gui.add(tryObj, 'tryBuild').name('try building heap on your own!');
 }
 
 initGui();
