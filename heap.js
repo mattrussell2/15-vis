@@ -60,8 +60,6 @@ var txtColor = darkGrey;
 var aryDeltaX = maxAryWidth / ( heapSize + 1 );
 var aryXStart = -maxAryWidth / 2 + aryDeltaX / 2;
 
-var levelColors = Array(numLevels).fill(nodeColor);
-
 
 while ( aryDeltaX < boxDim ) {
     boxDim *= 0.75; 
@@ -491,7 +489,6 @@ function initGui() {
         }
 
         heapSize = Math.pow(2, numLevels) - 1;
-        levelColors = Array(numLevels).fill(nodeColor);
         
         aryDeltaX = maxAryWidth / ( heapSize + 1 );
         aryXStart = -maxAryWidth / 2 + aryDeltaX / 2;
@@ -505,20 +502,13 @@ function initGui() {
         initHeap();
     });
 
-    // gui.add( param, 'palette', Object.keys(colors), 'viridis' ).onChange( function ( val ) {
-    //     colorFormat = val;
-    //     levelColors = Array(numLevels).fill(0).map((_, i) => colors[colorFormat]((i + 1) / numLevels));
-    //     treeNodes.forEach(node => node.material.color = new THREE.Color(node.userData.level == 0xd3d3d3 ? 0xd3d3d3 : levelColors[node.userData.level]));
-    //     aryNodes.forEach(node => node.material.color = new THREE.Color(node.userData.level == 0xd3d3d3 ? 0xd3d3d3 : levelColors[node.userData.level]));
-    // }); 
     const colorFolder = gui.addFolder( 'colors' );
 
     colorFolder.addColor( param, 'node color' ).onChange( function ( val ) {
         if (nodeColor == val) return;
         nodeColor = val;
-        const threeNodeColor = new THREE.Color(nodeColor);
-        treeNodes.forEach(node => node.material.color = threeNodeColor);
-        aryNodes.forEach(node => node.material.color = threeNodeColor);
+        treeNodes.forEach(node => node.material.color = new THREE.Color(nodeColor));
+        aryNodes.forEach(node => node.material.color = new THREE.Color(nodeColor));
     });
 
     colorFolder.addColor( param, 'text color' ).onChange( function ( val ) {
