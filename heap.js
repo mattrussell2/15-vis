@@ -336,7 +336,7 @@ async function reHeapDown( parentIdx, quiet=false ) {
     if ( leftIdx >= heapSize ) {  // no children (leaf) - assume heap always full. [TODO]
         if (quiet) return;
         toggleBoxColors( parentIdx, "green" );
-        await toggleNodes( [ parentIdx ], 1000*algoSpeed, 200*algoSpeed );
+        await toggleNodes( [ parentIdx ]);
         toggleBoxColors( parentIdx, "red" );
         return;
     }
