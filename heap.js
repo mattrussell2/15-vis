@@ -10,6 +10,16 @@ import { Interaction } from './three.interaction.js/src/index.js';
 import { TWEEN } from 'tween';
 import _ from 'underscore';
 
+const green = 0xa1e57b;
+const red = 0xfe6d7e;
+const white = 0xf1fffc;
+const yellow = 0xffed71;
+const grey = 0x8a9798;
+const blue = 0x7bd5f1;
+const orange = 0xffb170;
+const darkGrey = 0x273135;
+const purple = 0xbaa0f8;
+
 const font = new FontLoader().parse( fontData );
 const frustumSize = 250;
 const aspect = window.innerWidth / window.innerHeight;
@@ -19,9 +29,9 @@ const camera = new THREE.OrthographicCamera( frustumSize * aspect / - 2,
                                              frustumSize / - 2, 1, 1000 );
 camera.position.z = 50;
 const scene = new THREE.Scene();
-scene.background = new THREE.Color( 0xffffff );
+scene.background = new THREE.Color( darkGrey );
 
-const light = new THREE.AmbientLight( 0xffffff );
+const light = new THREE.AmbientLight( white );
 scene.add( light );
 
 // Set up the renderer
@@ -31,18 +41,6 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const interaction = new Interaction(renderer, scene, camera);
-
-const colors = { 
-    'viridis': d3.interpolateViridis, 
-    'magma': d3.interpolateMagma,
-    'inferno': d3.interpolateInferno,
-    'plasma': d3.interpolatePlasma,
-    'cividis': d3.interpolateCividis,
-    'warm': d3.interpolateWarm,
-    'cool': d3.interpolateCool,
-    'rainbow': d3.interpolateRainbow
-}
-var colorFormat = 'viridis';
 
 // params for tree and array node positions
 const treeXStart = 0;
@@ -55,12 +53,15 @@ const boxZ = -100;    // z location of the boxes
 // modifable params - levels, number of elements, and colors / level in the heap, boxDim - size of x,y,z for box..
 var numLevels = 4;
 var heapSize = Math.pow(2, numLevels) - 1;
-var levelColors = Array(numLevels).fill(0).map((_, i) => colors[colorFormat]((i + 1) / numLevels));
 var boxDim = 16;
-var lineColor = 0x000000;
-var txtColor = 0xffffff;
+var nodeColor = blue;
+var lineColor = blue; // red0xff6188;
+var txtColor = darkGrey;
 var aryDeltaX = maxAryWidth / ( heapSize + 1 );
 var aryXStart = -maxAryWidth / 2 + aryDeltaX / 2;
+
+var levelColors = Array(numLevels).fill(nodeColor);
+
 
 while ( aryDeltaX < boxDim ) {
     boxDim *= 0.75; 
@@ -76,9 +77,10 @@ var swaps = [];
 var swapIdx = 0;
 
 function createNode( x, y, z, level, i, format ) {
-    const geometry = new THREE.BoxGeometry(boxDim, boxDim, 1);
+    const geometry = format == "array" ? new THREE.BoxGeometry(boxDim, boxDim, 1) : 
+                                         new THREE.SphereGeometry( boxDim / 2, 32, 32);
     const material = new THREE.MeshStandardMaterial({   
-                                                        color: level == 0xd3d3d3 ? level : levelColors[level], 
+                                                        color: level == 0xd3d3d3 ? level : nodeColor, 
                                                         opacity: 1, 
                                                         transparent: false,
                                                         polygonOffset: true,
@@ -123,14 +125,10 @@ function createTextMesh( num, x, y, z, i, format ) {
     let tsize = textSize;
     let theight = textHeight;
     let tcolor = txtColor;
-    let bevelThick = 0.5;
-    let bevelSize = 0.5;
     if ( format == "arrayNums" ) {
         tsize /= 2;
         theight /= 2;
         tcolor = 0x000000;
-        bevelThick /= 2;
-        bevelSize /= 2;
     }
 
     const textGeo = new TextGeometry( nstr, {
@@ -138,15 +136,12 @@ function createTextMesh( num, x, y, z, i, format ) {
                                                 size: tsize,
                                                 height: theight,
                                                 curveSegments: 12,
-                                                bevelEnabled: true,
-                                                bevelThickness: bevelThick,
-                                                bevelSize: bevelSize,
-                                                bevelOffset: 0,
-                                                bevelSegments: 5
+                                                bevelEnabled: false,
                                             });
             
     textGeo.computeBoundingBox();
-    const textMat = [ new THREE.MeshBasicMaterial( { color: tcolor } ), 
+    const textMat = [ 
+                      new THREE.MeshBasicMaterial( { color: tcolor } ), 
                       new THREE.MeshBasicMaterial( { color: lineColor } ) 
                     ];
     const textMesh = new THREE.Mesh( textGeo, textMat );
@@ -162,16 +157,20 @@ function createTextMesh( num, x, y, z, i, format ) {
     return textMesh;
 }
 
-const toggleBoxColors = ( nodeIdx, color ) => {
-    treeNodes[ nodeIdx - 1 ].children[0].material.color.set( color );
-    aryNodes[ nodeIdx ].children[0].material.color.set( color );
+async function wait() {
+    await new Promise((resolve) => setTimeout(resolve, 2000 * algoSpeed));
 }
 
-// given a node, toggles the box around it; assumes box is first child
-const toggleBoxes = ( nodeIdx ) => {
-    treeNodes[ nodeIdx - 1 ].children[0].visible = !treeNodes[ nodeIdx - 1 ].children[0].visible;
-    aryNodes[ nodeIdx ].children[0].visible = !aryNodes[ nodeIdx ].children[0].visible;
-    return treeNodes[ nodeIdx - 1 ].children[0].visible;
+async function setColor ( i, color, pause=false ) {
+    treeNodes[ i - 1 ].material.color.set( color );
+    aryNodes[ i ].material.color.set( color );
+    if ( pause ) await wait();
+}
+
+async function setColors( is, color, pause=false ) {
+    console.log(is);
+    is.forEach( i => setColor( i, color ) );
+    if ( pause ) await wait();
 }
 
 var heap = [];
@@ -306,7 +305,7 @@ async function swap( childIdx, parentIdx, quiet=false, pc=true ) {
     
     if ( pc ) swaps.push( indices );
 
-    if ( !quiet ) await toggleNodes( [ childIdx, parentIdx ] );
+    if ( !quiet ) await setColors( [ childIdx, parentIdx ], red, true );
 
     const numChild = heap[ childIdx ];
     const numParent = heap[ parentIdx ];
@@ -323,43 +322,48 @@ async function swap( childIdx, parentIdx, quiet=false, pc=true ) {
         const tmp = childTreeText.userData.i;
         childTreeText.userData.i = parentTreeText.userData.i;
         parentTreeText.userData.i = tmp;
+
+        await wait();
     }
 
     heap[ childIdx ] = numParent;
-    heap[ parentIdx ] = numChild;                                           
+    heap[ parentIdx ] = numChild;       
+    
+    if ( !quiet && pc ) await setColor( parentIdx, green, true );
 }
 
 async function reHeapDown( parentIdx, quiet=false ) {
     if ( parentIdx <= 0 ) return; // root
-    const leftIdx = 2 * parentIdx;
-    const rightIdx = 2 * parentIdx + 1;
-    if ( leftIdx >= heapSize ) {  // no children (leaf) - assume heap always full. [TODO]
-        if (quiet) return;
-        toggleBoxColors( parentIdx, "green" );
-        await toggleNodes( [ parentIdx ]);
-        toggleBoxColors( parentIdx, "red" );
-        return;
-    }
-    await compare(leftIdx, parentIdx, rightIdx, quiet);
+    if ( !quiet) await setColor( parentIdx, purple, true); 
+    await compare(parentIdx, quiet); 
 }
 
-async function compare( currIdx, parentIdx, siblingIdx, quiet=false ) {
-    const currNum = heap[ currIdx ];
-    const parentNum = heap[ parentIdx ];
-    const siblingNum = heap[ siblingIdx ];
-    
-    if ( !quiet ) {
-        await toggleNodes( [ parentIdx ] );
-        await toggleNodes( [ currIdx ] );
-        await toggleNodes( [ siblingIdx ] );
+async function compare( parentIdx, quiet=false ) {
+    const leftIdx = 2 * parentIdx;
+    const rightIdx = 2 * parentIdx + 1;
+
+    if ( leftIdx >= heapSize ) {  // no children (leaf)
+        if (quiet) return;
+        await setColor( parentIdx, green, true );
+        return;
     }
+
+    const parentNum = heap[ parentIdx ];
+    const leftNum = heap[ leftIdx ];
+    const rightNum = heap[ rightIdx ];
     
-    if ( currNum < siblingNum && currNum < parentNum ) {
-        await swap( currIdx, parentIdx, quiet );
-        await reHeapDown( currIdx, quiet );
-    } else if ( siblingNum < parentNum && siblingNum < parentNum ) {
-        await swap( siblingIdx, parentIdx, quiet );
-        await reHeapDown( siblingIdx, quiet );
+    if ( !quiet ) await setColors( [ parentIdx, leftIdx, rightIdx ], yellow, true );
+    
+    if ( leftNum < rightNum && leftNum < parentNum ) {
+        if ( !quiet) setColor( rightIdx, green );
+        await swap( leftIdx, parentIdx, quiet );
+        await reHeapDown( leftIdx, quiet );
+    } else if ( rightNum < parentNum ) {
+        if ( !quiet) setColor( leftIdx, green );
+        await swap( rightIdx, parentIdx, quiet );
+        await reHeapDown( rightIdx, quiet );
+    } else {
+        if ( !quiet ) await setColors( [ parentIdx, leftIdx, rightIdx ], green, true );
     }
 }
 
@@ -372,18 +376,10 @@ async function pause() {
 async function buildHeap( quiet=false ) {
     swaps = [];
     const origHeap = [...heap];
-    if (quiet == false) {
-        const node_indices = [];
-        for (let i = heapSize; i > Math.floor(heapSize / 2); i -= 1) {
-            toggleBoxColors( i, "green" );
-            node_indices.push(i);
-        }
-        
-        await toggleNodes( node_indices ); //, 1000*algoSpeed, 200*algoSpeed );
-        for (let i = heapSize; i > Math.floor(heapSize / 2); i -= 1) {
-            toggleBoxColors( i, "red" );
-            node_indices.push(i);
-        }
+    if ( !quiet ) {
+        const done_node_indices = _.range(Math.floor(heapSize / 2) + 1, heapSize + 1);
+        await setColors( done_node_indices, purple, true );
+        await setColors( done_node_indices, green, true );
     }
     for (let i = Math.floor(heapSize / 2); i > 0; i -= 1) {
         await(reHeapDown(i, quiet));
@@ -394,19 +390,28 @@ async function buildHeap( quiet=false ) {
     console.log("done building");
 }
 
+function getColor( i ) {
+    return treeNodes[ i - 1 ].material.color;
+}
+
+function toggleColor( i ) {
+    const currColor = getColor( i ).getHex();
+    const newColor = currColor === blue ? yellow : blue;
+    setColor( i, newColor );
+    return newColor;
+}
 
 var toggled = [];
 var numMistakes = 0;
 function makeClicky(obj) {
     obj.cursor = "pointer";
     obj.on('click', function() {
-        
         let i = obj.userData.i;
         if ( obj.name.includes("tree") && !obj.name.includes("box") ) {
             i++;
         }
         
-        const visible = toggleBoxes( i ); 
+        const visible = toggleColor( i ) === yellow;
         if ( visible ) toggled.push( i );
         else toggled = toggled.filter( j => j != i );
 
@@ -417,7 +422,7 @@ function makeClicky(obj) {
             // if a is not child of b or b not child of a, complain
             if ( i * 2 !== j && ( i * 2 ) + 1 !== j ) {
                 alert("Invalid swap");
-                toggled.forEach( idx => toggleBoxes( idx ) );
+                toggled.forEach( idx => toggleColor( idx ) );
                 toggled = [];
                 numMistakes++;
             } else {
@@ -425,13 +430,12 @@ function makeClicky(obj) {
                 
                 if ( !_.isEqual(toggled, correct) ) {
                     alert("Incorrect swap!");
-                    toggled.forEach( idx => toggleBoxes( idx ) );
+                    toggled.forEach( idx => toggleColor( idx ) );
                     toggled = [];
                     numMistakes++;
                 }else {
-                    toggled.forEach( idx => toggleBoxColors( idx, "green" ) );
                     swap( toggled[1], toggled[0], false, false ); 
-                    toggled.forEach( idx => toggleBoxes( idx ) );
+                    setColors( toggled, blue );
                     swapIdx++;
                     toggled = [];
                 }
@@ -444,6 +448,7 @@ function makeClicky(obj) {
             if ( numMistakes >= 4 ) alert("Finished! You made " + numMistakes + " mistakes. Try again!");
         }
     });
+    
 }
 
 async function tryBuild() {
@@ -466,10 +471,11 @@ function initGui() {
 
     const param = {
         'num levels': 4,
-        'palette': 'viridis',
+        //'palette': 'viridis',
         'width': 5,
-        'txtColor': "#ffffff",
-        'lineColor': "#000000",
+        'text color': txtColor,
+        'line color': lineColor,
+        'node color': nodeColor,
         'algo speed': 1
     };
 
@@ -485,7 +491,7 @@ function initGui() {
         }
 
         heapSize = Math.pow(2, numLevels) - 1;
-        levelColors = Array(numLevels).fill(0).map((_, i) => colors[colorFormat]((i + 1) / numLevels));
+        levelColors = Array(numLevels).fill(nodeColor);
         
         aryDeltaX = maxAryWidth / ( heapSize + 1 );
         aryXStart = -maxAryWidth / 2 + aryDeltaX / 2;
@@ -499,18 +505,23 @@ function initGui() {
         initHeap();
     });
 
-    gui.add( param, 'palette', Object.keys(colors), 'viridis' ).onChange( function ( val ) {
-        colorFormat = val;
-        levelColors = Array(numLevels).fill(0).map((_, i) => colors[colorFormat]((i + 1) / numLevels));
-        treeNodes.forEach(node => node.material.color = new THREE.Color(node.userData.level == 0xd3d3d3 ? 0xd3d3d3 : levelColors[node.userData.level]));
-        aryNodes.forEach(node => node.material.color = new THREE.Color(node.userData.level == 0xd3d3d3 ? 0xd3d3d3 : levelColors[node.userData.level]));
-    }); 
+    // gui.add( param, 'palette', Object.keys(colors), 'viridis' ).onChange( function ( val ) {
+    //     colorFormat = val;
+    //     levelColors = Array(numLevels).fill(0).map((_, i) => colors[colorFormat]((i + 1) / numLevels));
+    //     treeNodes.forEach(node => node.material.color = new THREE.Color(node.userData.level == 0xd3d3d3 ? 0xd3d3d3 : levelColors[node.userData.level]));
+    //     aryNodes.forEach(node => node.material.color = new THREE.Color(node.userData.level == 0xd3d3d3 ? 0xd3d3d3 : levelColors[node.userData.level]));
+    // }); 
+    const colorFolder = gui.addFolder( 'colors' );
 
-    gui.addColor( param, 'txtColor' ).onChange( function ( val ) {
-        val = val.replace('#', '');    
-        val = "rgb(" + parseInt(val.substring(0, 2), 16).toString() + "," + 
-                       parseInt(val.substring(2, 4), 16).toString() + "," + 
-                       parseInt(val.substring(4, 6), 16).toString() + ")";
+    colorFolder.addColor( param, 'node color' ).onChange( function ( val ) {
+        if (nodeColor == val) return;
+        nodeColor = val;
+        const threeNodeColor = new THREE.Color(nodeColor);
+        treeNodes.forEach(node => node.material.color = threeNodeColor);
+        aryNodes.forEach(node => node.material.color = threeNodeColor);
+    });
+
+    colorFolder.addColor( param, 'text color' ).onChange( function ( val ) {
         if (txtColor == val) return;
         txtColor = val;
 
@@ -522,16 +533,16 @@ function initGui() {
         }
     });
 
-    gui.addColor( param, 'lineColor' ).onChange( function ( val ) {
-        val = val.replace('#', '');    
-        val = "rgb(" + parseInt(val.substring(0, 2), 16).toString() + "," + 
-                       parseInt(val.substring(2, 4), 16).toString() + "," + 
-                       parseInt(val.substring(4, 6), 16).toString() + ")";
+    colorFolder.addColor( param, 'line color' ).onChange( function ( val ) {
         if (lineColor == val) return;
         lineColor = val;
         lines.forEach(line => line.material.color = new THREE.Color(lineColor));
     });
 
+    colorFolder.close();
+
+
+    
     var obj = { add:function(){ 
                                 if (algoStatus === "stopped") {
                                     algoStatus = "running";
