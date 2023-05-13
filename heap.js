@@ -72,11 +72,9 @@ var algoSpeed = 1;
 var algoStatus = 'stopped';
 var pauseControllerObj;
 
-// 
 var swaps = [];
 var swapIdx = 0;
 
-// Define a function to create a single node
 function createNode( x, y, z, level, i, format ) {
     const geometry = new THREE.BoxGeometry(boxDim, boxDim, 1);
     const material = new THREE.MeshStandardMaterial({   
@@ -84,7 +82,7 @@ function createNode( x, y, z, level, i, format ) {
                                                         opacity: 1, 
                                                         transparent: false,
                                                         polygonOffset: true,
-                                                        polygonOffsetFactor: 1, // positive value pushes polygon further away
+                                                        polygonOffsetFactor: 1, // >0 pushes polygon further away
                                                         polygonOffsetUnits: 1, 
                                                     });
 
@@ -148,7 +146,9 @@ function createTextMesh( num, x, y, z, i, format ) {
                                             });
             
     textGeo.computeBoundingBox();
-    const textMat = [ new THREE.MeshBasicMaterial( { color: tcolor } ), new THREE.MeshBasicMaterial( { color: lineColor } ) ] ;
+    const textMat = [ new THREE.MeshBasicMaterial( { color: tcolor } ), 
+                      new THREE.MeshBasicMaterial( { color: lineColor } ) 
+                    ];
     const textMesh = new THREE.Mesh( textGeo, textMat );
     const textCenter = textGeo.boundingBox.getCenter( new THREE.Vector3() );
 
@@ -333,7 +333,13 @@ async function reHeapDown( parentIdx, quiet=false ) {
     if ( parentIdx <= 0 ) return; // root
     const leftIdx = 2 * parentIdx;
     const rightIdx = 2 * parentIdx + 1;
-    if ( leftIdx >= heapSize ) return; // no children (leaf) - assume heap always full. [TODO]
+    if ( leftIdx >= heapSize ) {  // no children (leaf) - assume heap always full. [TODO]
+        if (quiet) return;
+        toggleBoxColors( parentIdx, "green" );
+        await toggleNodes( [ parentIdx ], 1000*algoSpeed, 200*algoSpeed );
+        toggleBoxColors( parentIdx, "red" );
+        return;
+    }
     await compare(leftIdx, parentIdx, rightIdx, quiet);
 }
 
@@ -343,9 +349,9 @@ async function compare( currIdx, parentIdx, siblingIdx, quiet=false ) {
     const siblingNum = heap[ siblingIdx ];
     
     if ( !quiet ) {
+        await toggleNodes( [ parentIdx ] );
         await toggleNodes( [ currIdx ] );
         await toggleNodes( [ siblingIdx ] );
-        await toggleNodes( [ parentIdx ] );
     }
     
     if ( currNum < siblingNum && currNum < parentNum ) {
@@ -366,14 +372,26 @@ async function pause() {
 async function buildHeap( quiet=false ) {
     swaps = [];
     const origHeap = [...heap];
-    for (let i = heapSize; i > 1; i -= 2) {
-        const parentIdx = Math.floor( i / 2 );
-        const siblingIdx = i % 2 === 0 ? i + 1 : i - 1;
-        await compare( i, parentIdx, siblingIdx, quiet );
+    if (quiet == false) {
+        const node_indices = [];
+        for (let i = heapSize; i > Math.floor(heapSize / 2); i -= 1) {
+            toggleBoxColors( i, "green" );
+            node_indices.push(i);
+        }
+        
+        await toggleNodes( node_indices ); //, 1000*algoSpeed, 200*algoSpeed );
+        for (let i = heapSize; i > Math.floor(heapSize / 2); i -= 1) {
+            toggleBoxColors( i, "red" );
+            node_indices.push(i);
+        }
+    }
+    for (let i = Math.floor(heapSize / 2); i > 0; i -= 1) {
+        await(reHeapDown(i, quiet));
         if ( algoStatus === "paused" ) await pause();
     }
     if ( quiet ) heap = origHeap;
     algoStatus = "stopped";
+    console.log("done building");
 }
 
 
@@ -439,7 +457,6 @@ async function tryBuild() {
     }
     treeNodes.forEach( node => makeClicky(node) );
     aryNodes.forEach( node => makeClicky(node) );
-
 }
 
 function initGui() {
