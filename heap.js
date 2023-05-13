@@ -155,20 +155,20 @@ function createTextMesh( num, x, y, z, i, format ) {
     return textMesh;
 }
 
-async function wait() {
-    await new Promise((resolve) => setTimeout(resolve, 2000 * algoSpeed));
+async function wait(scale=1) {
+    await new Promise((resolve) => setTimeout(resolve, 2000 * algoSpeed * scale));
 }
 
-async function setColor ( i, color, pause=false ) {
+async function setColor ( i, color, pause=false, scale=1 ) {
     treeNodes[ i - 1 ].material.color.set( color );
     aryNodes[ i ].material.color.set( color );
-    if ( pause ) await wait();
+    if ( pause ) await wait(scale);
 }
 
-async function setColors( is, color, pause=false ) {
+async function setColors( is, color, pause=false, scale=1 ) {
     console.log(is);
     is.forEach( i => setColor( i, color ) );
-    if ( pause ) await wait();
+    if ( pause ) await wait(scale);
 }
 
 var heap = [];
@@ -311,28 +311,41 @@ async function swap( childIdx, parentIdx, quiet=false, pc=true ) {
     if ( !quiet ) {
         const childTreeText = scene.getObjectByName(numChild.toString() + "_tree");
         const parentTreeText = scene.getObjectByName(numParent.toString() + "_tree");
-        tweenSwap(childTreeText, parentTreeText);
 
         const childAryText = scene.getObjectByName(numChild.toString() + "_array");
         const parentAryText = scene.getObjectByName(numParent.toString() + "_array");
+
+        childTreeText.material[0].color = new THREE.Color( 0x000000 );
+        parentTreeText.material[0].color = new THREE.Color( 0x000000 );
+        childAryText.material[0].color = new THREE.Color( 0x000000 );
+        parentAryText.material[0].color = new THREE.Color( 0x000000 );
+        
+        tweenSwap(childTreeText, parentTreeText);
         tweenSwap(parentAryText, childAryText, 0.25);
 
+        setTimeout(() => {
+            childTreeText.material[0].color = new THREE.Color( darkGrey );
+            parentTreeText.material[0].color = new THREE.Color( darkGrey );
+            childAryText.material[0].color = new THREE.Color( darkGrey );
+            parentAryText.material[0].color = new THREE.Color( darkGrey );
+        }, 1000)
+        
+    
         const tmp = childTreeText.userData.i;
         childTreeText.userData.i = parentTreeText.userData.i;
         parentTreeText.userData.i = tmp;
 
-        await wait();
     }
 
     heap[ childIdx ] = numParent;
     heap[ parentIdx ] = numChild;       
     
-    if ( !quiet && pc ) await setColor( parentIdx, green, true );
+    if ( !quiet && pc ) await setColor( parentIdx, green, true, .75 );
 }
 
 async function reHeapDown( parentIdx, quiet=false ) {
     if ( parentIdx <= 0 ) return; // root
-    if ( !quiet) await setColor( parentIdx, purple, true); 
+    if ( !quiet ) await setColor( parentIdx, purple, true); 
     await compare(parentIdx, quiet); 
 }
 
