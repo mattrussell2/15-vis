@@ -160,7 +160,7 @@ function createTextMesh( num, x, y, z, i, format ) {
     const textMesh = new THREE.Mesh( textGeo, textMat );
     const textCenter = textGeo.boundingBox.getCenter( new THREE.Vector3() );
 
-    let textY = format == "arrayNums" ? y : y - textCenter.y;
+    let textY = format == "arrayNums" ? y - textCenter.y*3 : y - textCenter.y;
 
     textMesh.position.set( x - textCenter.x, textY, z + textDeltaZ );
     textMesh.name = num.toString() + '_' + format;
@@ -223,7 +223,7 @@ function initHeap() {
 
     createTextMesh( heap[1], treeXStart, treeYStart, boxZ, 0, 'tree' );
     createTextMesh( heap[0], aryXStart, aryY, boxZ, 0, 'array' );
-    createTextMesh( 0, aryXStart, aryY + boxDim / 2, boxZ, 0, 'arrayNums' );
+    createTextMesh( 0, aryXStart, aryY - boxDim / 2, boxZ, 0, 'arrayNums' );
    
     for ( let i = 1; i < heapSize + 1; i++ ) {
         
@@ -247,7 +247,7 @@ function initHeap() {
         aryNodes.push( aryNodeLo );
 
         createTextMesh( heap[ i ], aryX, aryY, boxZ, i, 'array' );
-        createTextMesh( i, aryX, aryY + boxDim / 2, boxZ, i, 'arrayNums' );
+        createTextMesh( i, aryX, aryY - boxDim / 2, boxZ, i, 'arrayNums' );
 
     }
 
