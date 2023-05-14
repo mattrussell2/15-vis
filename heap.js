@@ -70,7 +70,6 @@ if (maxAryWidth > availableWidth) {
 var aryDeltaX = boxDim + space;
 var aryXStart = -maxAryWidth / 2;
 
-
 var textSize = boxDim / 2;
 var textHeight = textSize - 1; 
 var algoSpeed = 1;
@@ -84,7 +83,7 @@ function createNode( x, y, z, level, i, format ) {
     const geometry = format == "array" ? new THREE.BoxGeometry(boxDim, boxDim, 1) : 
                                          new THREE.SphereGeometry( boxDim / 2, 32, 32);
     const material = new THREE.MeshStandardMaterial({   
-                                                        color: level == 0xd3d3d3 ? level : nodeColor, 
+                                                        color: nodeColor, //level == 0xd3d3d3 ? level : nodeColor, 
                                                         opacity: 1, 
                                                         transparent: false,
                                                         polygonOffset: true,
@@ -273,15 +272,6 @@ function initHeap() {
         lines.push( line );
     }
     
-}
-
-async function toggleNodes(nodeList, onTime=2000*algoSpeed, offTime=300*algoSpeed) {
-    if ( algoStatus === "paused" ) await pause();
-    nodeList.forEach( nodeIdx => toggleBoxes( nodeIdx ) );
-    await new Promise( ( resolve ) => setTimeout( resolve, onTime ) );
-    if ( algoStatus === "paused" ) await pause();
-    nodeList.forEach( nodeIdx => toggleBoxes( nodeIdx ) );
-    await new Promise( ( resolve ) => setTimeout( resolve, offTime ) );
 }
 
 // given two points, return a point that is d along a vector perpendicular to the line formed by the original two points
@@ -525,7 +515,7 @@ function initGui() {
         }
         aryDeltaX = boxDim + space;
         aryXStart = -maxAryWidth / 2;
-
+        
         textSize = boxDim / 2;
         textHeight = textSize - 1; 
         
@@ -608,3 +598,25 @@ function render() {
     TWEEN.update();
 }
 render();
+
+
+window.addEventListener('resize', () => {
+    // Get the new width and height
+    let width = window.innerWidth;
+    let height = window.innerHeight;
+  
+    // Update the renderer size
+    renderer.setSize(width, height);
+  
+    // Update the aspect ratio
+    let aspect = width / height;
+  
+    // Update the camera's frustum
+    camera.left = frustumSize * aspect / -2;
+    camera.right = frustumSize * aspect / 2;
+    camera.top = frustumSize / 2;
+    camera.bottom = frustumSize / -2;
+  
+    // Update the camera's projection matrix
+    camera.updateProjectionMatrix();
+  });
