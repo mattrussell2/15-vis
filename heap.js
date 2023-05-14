@@ -46,24 +46,30 @@ const interaction = new Interaction(renderer, scene, camera);
 const treeXStart = 0;
 const treeYStart = 100;
 const aryY = -100;
-const maxAryWidth = frustumSize * aspect * .9; 
+
 const textDeltaZ = 5; // shift text forward so visible
 const boxZ = -100;    // z location of the boxes
 
 // modifable params - levels, number of elements, and colors / level in the heap, boxDim - size of x,y,z for box..
 var numLevels = 4;
 var heapSize = Math.pow(2, numLevels) - 1;
-var boxDim = 16;
 var nodeColor = blue;
 var lineColor = blue; // red0xff6188;
 var txtColor = darkGrey;
-var aryDeltaX = maxAryWidth / ( heapSize + 1 );
-var aryXStart = -maxAryWidth / 2 + aryDeltaX / 2;
 
 
-while ( aryDeltaX < boxDim ) {
-    boxDim *= 0.75; 
+var boxDim = 16; // The default width of a box
+var space = boxDim * 0.05; // The space between boxes
+var maxAryWidth = heapSize * (boxDim + space);
+var availableWidth = frustumSize * aspect * 0.9;
+if (maxAryWidth > availableWidth) {
+    boxDim = availableWidth / heapSize;
+    space = boxDim * 0.05;
+    maxAryWidth = heapSize * (boxDim + space);
 }
+var aryDeltaX = boxDim + space;
+var aryXStart = -maxAryWidth / 2;
+
 
 var textSize = boxDim / 2;
 var textHeight = textSize - 1; 
@@ -89,23 +95,33 @@ function createNode( x, y, z, level, i, format ) {
     const node = new THREE.Mesh( geometry, material );
     node.position.set(x, y, z);
     
-    // selector box for the node - hide at first
-    const offset = boxDim / 2;
-    const zPos = boxZ + 5;
-    const positions = [ -offset,  offset, zPos,   // left top
-                         offset,  offset, zPos,   // right top
-                         offset, -offset, zPos,   // right bottom
-                        -offset, -offset, zPos,   // left bottom
-                        -offset,  offset, zPos ]; 
-    
-    const lineGeo = new LineGeometry();
-    lineGeo.setPositions( positions );
+    if ( format === "array" ) {
+        console.log("HERE")
 
-    const lineMat = new LineMaterial( { color: 0xd44842, linewidth: 0.005 } ); // not sure why so small, but it works.
-    const lineMesh = new Line2( lineGeo, lineMat );
-    lineMesh.visible = false;
+        // selector box for the node - hide at first
+        const offset = boxDim / 2;
+        const zPos = boxZ + 5;
+        const positions = [ -offset,  offset, zPos,   // left top
+                            offset,  offset, zPos,   // right top
+                            offset, -offset, zPos,   // right bottom
+                            -offset, -offset, zPos,   // left bottom
+                            -offset,  offset, zPos ]; 
+        
+        const lineGeo = new LineGeometry();
+        lineGeo.setPositions( positions );
 
-    node.add( lineMesh );
+        const lineMat = new LineMaterial( { color: 0x000000, linewidth: 0.005 } ); // not sure why so small, but works.
+        const lineMesh = new Line2( lineGeo, lineMat );
+        lineMesh.visible = false;
+        //onsole.log(format);
+        // if (format !== "array") {
+        //     lineMesh.visible = true;
+        // }else {
+        //     lineMesh.visible = false;
+        // }
+
+        node.add( lineMesh );
+    }
 
     node.userData.level = level;
     node.userData.i = i;
@@ -209,7 +225,6 @@ function initHeap() {
     createTextMesh( heap[1], treeXStart, treeYStart, boxZ, 0, 'tree' );
     createTextMesh( heap[0], aryXStart, aryY, boxZ, 0, 'array' );
     createTextMesh( 0, aryXStart, aryY + boxDim / 2, boxZ, 0, 'arrayNums' );
-
    
     for ( let i = 1; i < heapSize + 1; i++ ) {
         
@@ -482,7 +497,6 @@ function initGui() {
 
     const param = {
         'num levels': 4,
-        //'palette': 'viridis',
         'width': 5,
         'text color': txtColor,
         'line color': lineColor,
@@ -494,21 +508,24 @@ function initGui() {
         if (numLevels == val || algoStatus !== "stopped" ) return;
         numLevels = val;
 
-        boxDim = 16; // always reset it
-
         // heap is about to change, so remove old heap objects
         for ( let i of Array(heapSize + 1).keys()) {
             scene.remove( scene.getObjectByName( i.toString() + '_arrayNums' ) );
         }
 
         heapSize = Math.pow(2, numLevels) - 1;
-        
-        aryDeltaX = maxAryWidth / ( heapSize + 1 );
-        aryXStart = -maxAryWidth / 2 + aryDeltaX / 2;
-
-        while ( aryDeltaX < boxDim ) {
-            boxDim *= 0.75; 
+        boxDim = 16; // The default width of a box
+        space = boxDim * 0.05; // The space between boxes
+        maxAryWidth = heapSize * (boxDim + space);
+        availableWidth = frustumSize * aspect * 0.9;
+        if (maxAryWidth > availableWidth) {
+            boxDim = availableWidth / heapSize;
+            space = boxDim * 0.05;
+            maxAryWidth = heapSize * (boxDim + space);
         }
+        aryDeltaX = boxDim + space;
+        aryXStart = -maxAryWidth / 2;
+
         textSize = boxDim / 2;
         textHeight = textSize - 1; 
         
