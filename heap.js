@@ -308,7 +308,7 @@ async function swap( childIdx, parentIdx, quiet=false, pc=true ) {
     
     if ( pc ) swaps.push( indices );
 
-    if ( !quiet ) await setColors( [ childIdx, parentIdx ], red, true );
+    if ( !quiet && pc) await setColors( [ childIdx, parentIdx ], red, true );
 
     const numChild = heap[ childIdx ];
     const numParent = heap[ parentIdx ];
@@ -450,18 +450,22 @@ function makeClicky(obj) {
                     toggled = [];
                     numMistakes++;
                 }else {
-                    swap( toggled[1], toggled[0], false, false ); 
-                    setColors( toggled, blue );
-                    swapIdx++;
-                    toggled = [];
+                        setTimeout(async () => {
+                            console.log(toggled);
+                            await swap( toggled[1], toggled[0], false, false );
+                            setColors( toggled, blue );
+                            swapIdx++;
+                            toggled = [];
+                            if ( swapIdx === swaps.length ) {
+                                if ( numMistakes === 0 ) alert("Perfect!");
+                                if ( numMistakes === 1 ) alert("Nice Work! You made 1 mistake.");
+                                if ( numMistakes > 1 && numMistakes < 4 ) alert("Finished! You made " + numMistakes + " mistakes.");
+                                if ( numMistakes >= 4 ) alert("Finished! You made " + numMistakes + " mistakes. Try again!");
+                            }
+                        }, 1500);    
+                   
                 }
             }
-        }
-        if ( swapIdx === swaps.length ) {
-            if ( numMistakes === 0 ) alert("Perfect!");
-            if ( numMistakes === 1 ) alert("Nice Work! You made 1 mistake.");
-            if ( numMistakes > 1 && numMistakes < 4 ) alert("Finished! You made " + numMistakes + " mistakes.");
-            if ( numMistakes >= 4 ) alert("Finished! You made " + numMistakes + " mistakes. Try again!");
         }
     });
     
@@ -482,6 +486,7 @@ async function tryBuild() {
 
 function initGui() {
 
+
     const gui = new GUI();
     gui.name = "gui";
 
@@ -491,7 +496,8 @@ function initGui() {
         'text color': txtColor,
         'line color': lineColor,
         'node color': nodeColor,
-        'algo speed': 1
+        'algo speed': 1, 
+        tryBuild: function() { tryBuild(); }
     };
 
     gui.add( param, 'num levels', 2, 6, 1).onChange( function ( val ) {
@@ -550,8 +556,6 @@ function initGui() {
     });
 
     colorFolder.close();
-
-
     
     var obj = { add:function(){ 
                                 if (algoStatus === "stopped") {
@@ -582,10 +586,20 @@ function initGui() {
         algoSpeed = 1/val;
     });
 
-    var tryObj = { tryBuild: function() { tryBuild(); }
-    };
+    let controller = gui.add( param, 'tryBuild').name('try building heap on your own!');
 
-    gui.add(tryObj, 'tryBuild').name('try building heap on your own!');
+    // Change the button's style when it's clicked
+    controller.domElement.addEventListener('click', function() {
+        // Get the actual button element
+        var button = this.querySelector('.name');
+        let dg = "#" + new THREE.Color(darkGrey).getHexString();
+        let currcolor = "#" + new THREE.Color(button.style.backgroundColor).getHexString();
+        if ( currcolor === dg ) {
+            button.style.backgroundColor = '';  // Not selected
+        } else {
+            button.style.backgroundColor = dg;  // Selected
+        }
+    });
 }
 
 initGui();
