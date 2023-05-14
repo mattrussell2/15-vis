@@ -497,7 +497,25 @@ function initGui() {
         'line color': lineColor,
         'node color': nodeColor,
         'algo speed': 1, 
-        tryBuild: function() { tryBuild(); }
+        tryBuild: function() { tryBuild(); },
+        add:function(){ 
+            if (algoStatus === "stopped") {
+                algoStatus = "running";
+                buildHeap();
+            }
+        }, 
+        pauseObj:function(){ 
+            if (algoStatus === "running") {
+                algoStatus = "paused";
+                pauseControllerObj.name('resume execution');
+                pauseControllerObj.updateDisplay();
+            } else {
+                algoStatus = "running";
+                pauseControllerObj.name('pause  execution');
+                pauseControllerObj.updateDisplay();
+            }
+            
+        }
     };
 
     gui.add( param, 'num levels', 2, 6, 1).onChange( function ( val ) {
@@ -557,36 +575,19 @@ function initGui() {
 
     colorFolder.close();
     
-    var obj = { add:function(){ 
-                                if (algoStatus === "stopped") {
-                                    algoStatus = "running";
-                                    buildHeap();
-                                }
-                            }
-              };
+    const autoFolder = gui.addFolder( 'auto build' );
 
-    gui.add(obj, 'add').name('build heap (bottom-up)');
+    autoFolder.add( param, 'add').name('build heap (bottom-up)');
 
-    var pauseObj = { pauseObj:function(){ 
-        if (algoStatus === "running") {
-            algoStatus = "paused";
-            pauseControllerObj.name('resume execution');
-            pauseControllerObj.updateDisplay();
-        } else {
-            algoStatus = "running";
-            pauseControllerObj.name('pause  execution');
-            pauseControllerObj.updateDisplay();
-        }
-        
-    }};
-    pauseControllerObj = gui.add(pauseObj, 'pauseObj'); 
+    pauseControllerObj = autoFolder.add(param, 'pauseObj'); 
     pauseControllerObj.name('pause execution');
 
-    gui.add( param, 'algo speed', 0.01, 4).onChange( async function ( val ) {
+    autoFolder.add( param, 'algo speed', 0.01, 4).onChange( async function ( val ) {
         algoSpeed = 1/val;
     });
 
-    let controller = gui.add( param, 'tryBuild').name('try building heap on your own!');
+    const manualFolder = gui.addFolder( 'manual build' );
+    let controller = manualFolder.add( param, 'tryBuild').name('try building heap on your own!');
 
     // Change the button's style when it's clicked
     controller.domElement.addEventListener('click', function() {
