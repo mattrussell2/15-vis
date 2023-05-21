@@ -14,6 +14,9 @@ import _                from 'underscore';
 var HEAP_TYPE   = "max";
 var BUILD_STYLE = "bottom-up";
 var WHO_BUILDS  = "pc";
+var HEAP_BUILT  = false;
+var CLICKY      = false;
+var CLICK_TYPE  = "build";
 
 // colors!
 const GREEN    = 0xa1e57b;
@@ -45,7 +48,8 @@ var MAX_ARRY_WIDTH = FRUSTUM_SIZE * ASPECT_RATIO * 0.9;
 // font used to display text
 const FONT = new FontLoader().parse( fontData );
 
-var START_BUTTON;
+var BUILD_START_BUTTON;
+var REMOVE_START_BUTTON;
 
 function reset_camera() {
 
@@ -237,7 +241,6 @@ function initHeap() {
     TEXT_SIZE         = BOX_DIM / 2;
     TEXT_HEIGHT       = TEXT_SIZE - 1; 
     
-
     // clear objects from scene
     TREE_NODES.forEach(node => scene.remove(node));
     ARRY_NODES.forEach(node => scene.remove(node));
@@ -297,6 +300,8 @@ function initHeap() {
         scene.add( line );
         LINES.push( line );
     }
+
+    iterNodes( ( node ) => { makeClicky( node ) } );
     
 }
 
@@ -327,7 +332,7 @@ const tweenSwap = ( obj1 , obj2, scale = 1 ) => {
         new TWEEN.Tween( a.position ).to( {
             x: [ bezP.x * scale, b.position.x ], 
             y: [ bezP.y * scale, b.position.y ]
-        }, 1000).interpolation( TWEEN.Interpolation.Bezier ).start();
+        }, 1000 * ( WHO_BUILDS === "pc" ? ALGO_SPEED : 1 ) ).interpolation( TWEEN.Interpolation.Bezier ).start();
     }
 
 }
@@ -339,7 +344,7 @@ function sortNumbers( a, b ) {
 }
 
 async function swap( childIdx, parenIdx, quiet = false, pc = true ) {
-
+    console.log("swapping", childIdx, parenIdx);
     let indices = [ childIdx, parenIdx ];
     indices.sort( sortNumbers );
     
@@ -380,8 +385,7 @@ async function swap( childIdx, parenIdx, quiet = false, pc = true ) {
 
     HEAP[ childIdx ] = numParen;
     HEAP[ parenIdx ] = numChild;       
-    
-    // if ( !quiet && pc ) await setColor( parenIdx, GREEN, true, .75 );
+
 }
 
 function cmp( a, b ) {
@@ -397,6 +401,7 @@ async function reHeapUp( nodeIdx, quiet = false ) {
         if ( !quiet ) await setColor( nodeIdx, GREEN, true ); 
         return; 
     }
+
     if ( !quiet ) await setColor( nodeIdx, PURPLE, true ); 
 
     const parIdx = Math.floor( nodeIdx / 2 );
@@ -423,7 +428,7 @@ async function reHeapDown( parIdx, quiet = false ) {
     const lftIdx = 2 * parIdx;
     const rhtIdx = 2 * parIdx + 1;
 
-    if ( lftIdx >= HEAP_SIZE ) {  // no children (leaf)
+    if ( lftIdx > HEAP_SIZE ) {  // no children (leaf)
         if (quiet) return;
         await setColor( parIdx, GREEN, true );
         return;
@@ -431,22 +436,32 @@ async function reHeapDown( parIdx, quiet = false ) {
 
     const parNum = HEAP[ parIdx ];
     const lftNum = HEAP[ lftIdx ];
-    const rhtNum = HEAP[ rhtIdx ];
-    
-    if ( !quiet ) await setColors( [ parIdx, lftIdx, rhtIdx ], YELLOW, true );
-    
-    if ( cmp( lftNum, rhtNum ) && cmp( lftNum, parNum ) ) {
-        if ( !quiet ) setColor( rhtIdx, GREEN );
-        await swap( lftIdx, parIdx, quiet );
-        if ( !quiet ) setColor( parIdx, GREEN );
-        await reHeapDown( lftIdx, quiet );
-    } else if ( cmp( rhtNum, parNum ) ) {
-        if ( !quiet ) setColor( lftIdx, GREEN );
-        await swap( rhtIdx, parIdx, quiet );
-        if ( !quiet ) setColor( parIdx, GREEN ); 
-        await reHeapDown( rhtIdx, quiet );
-    } else {
-        if ( !quiet ) await setColors( [ parIdx, lftIdx, rhtIdx ], GREEN, true );
+    const rhtNum = rhtIdx > HEAP_SIZE ? null : HEAP[ rhtIdx ];
+
+    if ( rhtNum === null ) {
+        if ( !quiet ) await setColors( [ parIdx, lftIdx ], YELLOW, true );
+        if ( cmp( lftNum, parNum ) ) {
+            await swap( lftIdx, parIdx, quiet );
+            if ( !quiet ) setColor( parIdx, GREEN );
+            await reHeapDown( lftIdx, quiet );
+        }else {
+            if ( !quiet ) await setColors( [ parIdx, lftIdx ], GREEN, true );
+        }
+    }else {
+        if ( !quiet ) await setColors( [ parIdx, lftIdx, rhtIdx ], YELLOW, true );
+        if ( cmp( lftNum, rhtNum ) && cmp( lftNum, parNum ) ) {
+            if ( !quiet ) setColor( rhtIdx, GREEN );
+            await swap( lftIdx, parIdx, quiet );
+            if ( !quiet ) setColor( parIdx, GREEN );
+            await reHeapDown( lftIdx, quiet );
+        } else if ( cmp( rhtNum, parNum ) ) {
+            if ( !quiet ) setColor( lftIdx, GREEN );
+            await swap( rhtIdx, parIdx, quiet );
+            if ( !quiet ) setColor( parIdx, GREEN ); 
+            await reHeapDown( rhtIdx, quiet );
+        } else {
+            if ( !quiet ) await setColors( [ parIdx, lftIdx, rhtIdx ], GREEN, true );
+        }
     }
 
 }
@@ -483,7 +498,11 @@ async function buildHeap( quiet = false ) {
     if ( quiet ) HEAP = origHeap;
     ALGO_STATUS = "stopped";
     console.log("done building");
-    if ( !quiet ) START_BUTTON.domElement.click();
+    if ( !quiet ) {
+        BUILD_START_BUTTON.domElement.click();  
+        BUILD_START_BUTTON.name( 'build heap' );
+        HEAP_BUILT = true;
+    }
 
 }
 
@@ -495,19 +514,31 @@ function getColor( i ) {
 
 function toggleColor( i ) {
 
-    const currColor = getColor( i ).getHex();
-    const newColor = currColor === BLUE ? YELLOW : BLUE;
+    const currColor = getColor( i ).getHexString();
+    console.log("currcolor", currColor);
+    console.log("currcolor==green",currColor === new THREE.Color(GREEN).getHexString());
+    const newColor  = ( currColor === new THREE.Color(BLUE).getHexString() || 
+                        currColor === new THREE.Color(GREEN).getHexString() ) ? YELLOW : BLUE;
     setColor( i, newColor );
+    console.log("changedcolor", newColor); 
     return newColor;
 
 }
 
-var toggled     = [];
-var numMistakes = 0;
-function makeClicky( obj ) {
+function timeAlert( msg, time = 1200 ) {
+    
+    setTimeout( () => { alert( msg ) }, time );
 
+}
+
+var toggled   = [];
+var nMistakes = 0;
+function makeClicky( obj ) {
+    
     obj.cursor = "pointer";
     obj.on('click', function() {
+
+        if ( !CLICKY ) return;
 
         let i = obj.userData.i;
         if ( obj.name.includes( "tree" ) && !obj.name.includes( "box" ) ) {
@@ -515,71 +546,179 @@ function makeClicky( obj ) {
         }
         
         const visible = toggleColor( i ) === YELLOW;
+
         if ( visible ) toggled.push( i );
         else toggled = toggled.filter( j => j != i );
 
         if ( toggled.length == 2 ) {
             toggled.sort( sortNumbers );
             const [ i, j ] = toggled;
-            
-            // if a is not child of b or b not child of a, complain
-            if ( i * 2 !== j && ( i * 2 ) + 1 !== j ) {
-                alert("Invalid swap");
-                toggled.forEach( idx => toggleColor( idx ) );
-                toggled = [];
-                numMistakes++;
-            } else {
-                const correct = SWAPS[SWAP_IDX];
-                
+            const correct  = SWAPS[SWAP_IDX];
+            if ( _.isEqual( toggled, correct ) ) {
+                setTimeout( async () => {
+                    await swap( toggled[ 1 ], toggled[ 0 ], false, false );
+                    if ( CLICK_TYPE === "build" ) {
+                        setColors( toggled, BLUE );
+                    } else {
+                        setColor( toggled[ 0 ], GREEN );
+                        if ( toggled[ 1 ] == HEAP_SIZE && SWAP_IDX == 0 ) {
+                            setColor( toggled[ 1 ], RED );
+                            HEAP_SIZE--;
+                        } else {
+                            setColor( toggled[ 1 ], GREEN );
+                        }
+                    }
+                    SWAP_IDX++;
+                    toggled = [];
+                    if ( SWAP_IDX === SWAPS.length ) {
+                        unclickify();
+                        if      ( nMistakes === 0 ) timeAlert( "Perfect!" );
+                        else if ( nMistakes === 1 ) timeAlert( "Nice Work! You made 1 mistake." );
+                        else                        timeAlert( "You made " + nMistakes + " mistakes. Try again!" );
+                        if ( CLICK_TYPE === "build" ) {
+                            HEAP_BUILT = true;
+                            BUILD_START_BUTTON.domElement.click();
+                            BUILD_START_BUTTON.name( 'build heap' );
+                            setColors( [ ...Array( HEAP_SIZE ).keys() ].map( i => i + 1 ), GREEN );
+                        }else {
+                            REMOVE_START_BUTTON.domElement.click();
+                            REMOVE_START_BUTTON.name( 'remove element' );
+                        }
+                        ALGO_STATUS = "stopped";    
+                    }
+                }, 1500 );  
+            }else {
                 if ( !_.isEqual(toggled, correct) ) {
                     alert("Incorrect swap!");
                     toggled.forEach( idx => toggleColor( idx ) );
                     toggled = [];
-                    numMistakes++;
+                    nMistakes++;
                 }else {
-                    setTimeout( async () => {
-                        await swap( toggled[ 1 ], toggled[ 0 ], false, false );
-                        setColors( toggled, BLUE );
-                        SWAP_IDX++;
+                    // if a is not child of b or b not child of a, complain
+                    if ( i * 2 !== j && ( i * 2 ) + 1 !== j ) {
+                        alert("Invalid swap");
+                        toggled.forEach( idx => toggleColor( idx ) );
                         toggled = [];
-                        if ( SWAP_IDX === SWAPS.length ) {
-                            if ( numMistakes === 0 ) alert("Perfect!");
-                            if ( numMistakes === 1 ) alert("Nice Work! You made 1 mistake.");
-                            if ( numMistakes > 1 && numMistakes < 4 ) alert("Finished! You made " + numMistakes + " mistakes.");
-                            if ( numMistakes >= 4 ) alert("Finished! You made " + numMistakes + " mistakes. Try again!");
-                        }
-                    }, 1500 );    
+                        nMistakes++;
+                    }
                 }
             }
         }
     });
-    
+}
+
+function iterNodes( nodeFunc ) {
+    for ( let elem of HEAP ) {
+        for ( let format of [ 'tree', 'arry' ]) {
+           const node = scene.getObjectByName( elem.toString() + '_' + format );
+           if ( node === undefined ) continue;
+           nodeFunc( node );
+        }
+    }
+    TREE_NODES.forEach( node => nodeFunc( node ) );
+    ARRY_NODES.forEach( node => nodeFunc( node ) );
+}
+
+function clickify() {
+    iterNodes( ( node ) => {
+        node.cursor = "pointer";
+    } );
+    CLICKY = true;
+}
+
+function unclickify() {
+    iterNodes( ( node ) => {
+        node.cursor = "auto";
+    } );
+    CLICKY = false;
 }
 
 async function tryBuild() {
 
     await buildHeap( true );
-
-    for ( let elem of HEAP ) {
-        for ( let format of [ 'tree', 'arry' ]) {
-           const node = scene.getObjectByName( elem.toString() + '_' + format );
-           if ( node === undefined ) continue;
-           makeClicky( node );
-        }
-    }
-
-    TREE_NODES.forEach( node => makeClicky( node ) );
-    ARRY_NODES.forEach( node => makeClicky( node ) );
+    clickify();
+    CLICK_TYPE = "build";
 
 }
 
-function toggleButton() {
+function tryRemove() {
 
+    removeElem( true );
+    clickify();
+    CLICK_TYPE = "remove";
+    
+}
+
+
+async function removeElem( quiet = false) {
+
+    SWAPS    = [];
+    SWAP_IDX = 0;
+    const origHeap = [ ...HEAP ];
+
+    if ( !HEAP_BUILT ) {
+        alert("Build a heap first!");
+    }else {
+        if ( HEAP_SIZE > 0 ) {
+            if ( HEAP_SIZE === 1 ) {
+                setColor( 1, RED );
+                HEAP_SIZE--;
+            }else {
+                SWAPS = [];
+                await swap( HEAP_SIZE, 1, quiet );  
+                HEAP_SIZE--;
+                await reHeapDown( 1, quiet );
+            }
+        }
+    }
+    if ( !quiet || HEAP_SIZE === 0 ) {
+        REMOVE_START_BUTTON.domElement.click();
+        REMOVE_START_BUTTON.name( 'remove element' );
+        ALGO_STATUS = "stopped";
+    } else {
+        HEAP = origHeap;
+        HEAP_SIZE++;
+    }
+
+}
+
+
+function runFunc( pcFunc, userFunc, button  ) {
+    if ( WHO_BUILDS === "pc" ) {
+        if (ALGO_STATUS === "stopped") {
+            ALGO_STATUS = "running";
+            button.name('pause');
+            button.updateDisplay();
+            pcFunc();
+        }else if (ALGO_STATUS === "running") {
+            ALGO_STATUS = "paused";
+            button.name('resume');
+            button.updateDisplay();
+        }else if (ALGO_STATUS === "paused") {
+            ALGO_STATUS = "running";
+            button.name('pause');
+            button.updateDisplay();
+        }
+    } else {
+        userFunc();
+    }
+}
+
+function colorButton() {
+    // Get the actual button element
+    var button    = this.querySelector( '.name' );
+    let dg        = "#" + new THREE.Color( DARKGREY ).getHexString();
+    let currcolor = "#" + new THREE.Color( button.style.backgroundColor ).getHexString();
+    if ( currcolor === dg ) {
+        button.style.backgroundColor = '';  // Not selected
+    } else {
+        button.style.backgroundColor = dg;  // Selected
+    }
 }
 
 function initGui() {
 
-    const gui = new GUI( { width: 150 } );
+    const gui = new GUI( { width: 175 } );
     gui.name  = "gui";
 
     const param = {
@@ -591,44 +730,9 @@ function initGui() {
         'algo speed'  : 1, 
         'heap type'   : HEAP_TYPE,
         'build style' : 'bottom-up',
-        'controller'  : 'pc (auto)', 
-        'auto build'  : () => { 
-                                if (ALGO_STATUS === "stopped") {
-                                    ALGO_STATUS = "running";
-                                    buildHeap();
-                                }
-                            }, 
-        build         : () => { 
-                                if ( WHO_BUILDS === "pc" ) {
-                                    if (ALGO_STATUS === "stopped") {
-                                        ALGO_STATUS = "running";
-                                        START_BUTTON.name('pause');
-                                        START_BUTTON.updateDisplay();
-                                        buildHeap();
-                                    }else if (ALGO_STATUS === "running") {
-                                        ALGO_STATUS = "paused";
-                                        START_BUTTON.name('resume');
-                                        START_BUTTON.updateDisplay();
-                                    }else if (ALGO_STATUS === "paused") {
-                                        ALGO_STATUS = "running";
-                                        START_BUTTON.name('pause');
-                                        START_BUTTON.updateDisplay();
-                                    }
-                                } else {
-                                    tryBuild() 
-                                }
-                            },
-        pauseObj      : () => { 
-                                if (ALGO_STATUS === "running") {
-                                    ALGO_STATUS = "paused";
-                                    START_BUTTON.name('resume');
-                                    START_BUTTON.updateDisplay();
-                                } else {
-                                    ALGO_STATUS = "running";
-                                    START_BUTTON.name('pause');
-                                    START_BUTTON.updateDisplay();
-                                }
-                            }
+        'controller'  : 'pc (auto)',
+        'remove elem' : () => { runFunc( removeElem, tryRemove, REMOVE_START_BUTTON ); },
+        'build'       : () => { runFunc( buildHeap, tryBuild, BUILD_START_BUTTON ); }
     };
 
     gui.add( param, 'heap type', [ 'max', 'min' ] ).onChange( function ( val ) {
@@ -645,73 +749,20 @@ function initGui() {
     });
 
     const who_builds = gui.add( param, 'controller', [ 'pc (auto)', 'you! (manual)' ] )
-    .onChange( val => { 
-                        val == "pc (auto)" ? WHO_BUILDS = "pc" : WHO_BUILDS = "user";
-                        initHeap(); 
-                        } 
-            );
+                          .onChange( val => { val == "pc (auto)" ? WHO_BUILDS = "pc" : WHO_BUILDS = "user"; } ); 
 
-    const pcFolder     = gui.addFolder( 'auto execution settings' );
-    const colorFolder  = gui.addFolder( 'colors' );
-    const buildFolder  = gui.addFolder( 'build heap' );
-
-    const algo_speed = pcFolder.add( param, 'algo speed', 0.01, 4 ).onChange( async v => { ALGO_SPEED = 1 / v; } );
-    
-    colorFolder.addColor( param, 'node color' ).onChange( function ( val ) {
-
-        if (NODE_COLOR == val) return;
-        NODE_COLOR = val;
-        TREE_NODES.forEach( node => node.material.color = new THREE.Color( NODE_COLOR ) );
-        ARRY_NODES.forEach( node => node.material.color = new THREE.Color( NODE_COLOR ) );
-
-    });
-
-    colorFolder.addColor( param, 'text color' ).onChange( function ( val ) {
-
-        if (TEXT_COLOR == val) return;
-        TEXT_COLOR = val;
-
-        HEAP.forEach( elem => {
-            for ( let format of [ 'tree', 'arry' ] ) {
-                const txtMesh = scene.getObjectByName( elem.toString() + '_' + format );
-            }
-        });
-
-    });
-
-    colorFolder.addColor( param, 'line color' ).onChange( function ( val ) {
-
-        if ( LINE_COLOR == val ) return;
-        LINE_COLOR = val;
-        LINES.forEach( line => line.material.color = new THREE.Color(  LINE_COLOR ) );
-
-    });
-
-    colorFolder.close();
-    pcFolder.close();
-    
-    const build_style = buildFolder.add( param, 'build style', [ 'bottom-up', 'top-down' ] )
+    const algo_speed  = gui.add( param, 'algo speed', 0.01, 6 ).onChange( async v => { ALGO_SPEED = 1 / v; } );
+    const build_style = gui.add( param, 'build style', [ 'bottom-up', 'top-down' ] )
                                    .onChange( val => { 
                                                        BUILD_STYLE = val; 
                                                        initHeap(); 
                                                      } 
                                             );
-    START_BUTTON = buildFolder.add( param, 'build' ).name( 'build heap!' );
-    
-    // Change the button's style when it's clicked
-    START_BUTTON.domElement.addEventListener( 'click', function() {
+    BUILD_START_BUTTON = gui.add( param, 'build' ).name( 'build heap' );
+    BUILD_START_BUTTON.domElement.addEventListener( 'click', colorButton ); 
 
-        // Get the actual button element
-        var button    = this.querySelector( '.name' );
-        let dg        = "#" + new THREE.Color( DARKGREY ).getHexString();
-        let currcolor = "#" + new THREE.Color( button.style.backgroundColor ).getHexString();
-        if ( currcolor === dg ) {
-            button.style.backgroundColor = '';  // Not selected
-        } else {
-            button.style.backgroundColor = dg;  // Selected
-        }
-
-    });
+    REMOVE_START_BUTTON = gui.add( param, 'remove elem' ).name( 'remove element' );
+    REMOVE_START_BUTTON.domElement.addEventListener( 'click', colorButton );
 }
 
 initGui();
