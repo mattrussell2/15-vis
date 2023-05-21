@@ -63,7 +63,7 @@ function reset_camera() {
     camera.updateProjectionMatrix();
 
     // max width that the arry can be 
-    var MAX_ARRY_WIDTH = FRUSTUM_SIZE * ASPECT_RATIO * 0.9;
+    MAX_ARRY_WIDTH = FRUSTUM_SIZE * ASPECT_RATIO * 0.9;
 
 }
 
