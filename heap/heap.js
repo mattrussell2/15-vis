@@ -10,8 +10,10 @@ import { Interaction }  from './three.interaction.js/src/index.js';
 import { TWEEN }        from 'tween';
 import _                from 'underscore';
 
-// font used to display text
-const FONT = new FontLoader().parse( fontData );
+// 'min' or 'max'
+var HEAP_TYPE   = "max";
+var BUILD_STYLE = "bottom-up";
+var WHO_BUILDS  = "pc";
 
 // colors!
 const GREEN    = 0xa1e57b;
@@ -26,19 +28,24 @@ const PURPLE   = 0xbaa0f8;
 const BLACK    = 0x000000;
 
 // box positioning constants
-const TREE_ROOT_X     = 0;
-const TREE_ROOT_Y     = 100;
-const ARRY_Y_POSI     = -100;
-const TXT_DELTA_Z     = 5;       // shift text forward so visible
-const BOX_Z           = -100;    // z location of the boxes
-const DEFAULT_BOX_DIM = 16;
+const TREE_ROOT_X = 0;
+const TREE_ROOT_Y = 100;
+const ARRY_Y_POSI = -100;
+const TXT_DELTA_Z = 5;       // shift text forward so visible
+const BOX_Z       = -100;    // z location of the boxes
+const DEF_BOX_DIM = 16;
 
 // camera params
-const FRUSTUM_SIZE    = 250;
-var   ASPECT_RATIO    = window.innerWidth / window.innerHeight;
+const FRUSTUM_SIZE = 250;
+var   ASPECT_RATIO = window.innerWidth / window.innerHeight;
 
 // array can take up 90% of the screen max
-var   MAX_ARRY_WIDTH  = FRUSTUM_SIZE * ASPECT_RATIO * 0.9;
+var MAX_ARRY_WIDTH = FRUSTUM_SIZE * ASPECT_RATIO * 0.9;
+
+// font used to display text
+const FONT = new FontLoader().parse( fontData );
+
+var START_BUTTON;
 
 function reset_camera() {
 
@@ -52,7 +59,7 @@ function reset_camera() {
     camera.updateProjectionMatrix();
 
     // max width that the arry can be 
-    var   MAX_arry_WIDTH = FRUSTUM_SIZE * ASPECT_RATIO * 0.9;
+    var MAX_ARRY_WIDTH = FRUSTUM_SIZE * ASPECT_RATIO * 0.9;
 
 }
 
@@ -90,7 +97,7 @@ var ALGO_SPEED  = 1;
 var ALGO_STATUS = 'stopped';
 
 // these will change dependent on the above params
-var BOX_DIM     = DEFAULT_BOX_DIM;
+var BOX_DIM     = DEF_BOX_DIM;
 var TEXT_SIZE   = BOX_DIM / 2;
 var TEXT_HEIGHT = TEXT_SIZE - 1; 
 
@@ -116,13 +123,13 @@ function createNode( x, y, z, i, format ) {
                                                         polygonOffsetFactor: 1, // >0 pushes polygon further away
                                                         polygonOffsetUnits: 1, 
                                                     } );
+    const nodeMesh = new THREE.Mesh( geometry, material );
 
-    const node     = new THREE.Mesh( geometry, material );
-    node.position.set(x, y, z);
-    node.userData.i     = i;
-    node.name           = i.toString() + '_' + format + '_box_idx';
+    nodeMesh.position.set(x, y, z);
+    nodeMesh.userData.i = i;
+    nodeMesh.name       = i.toString() + '_' + format + '_box_idx';
 
-    scene.add( node );
+    scene.add( nodeMesh );
 
     // create the text mesh associated with the node (to start)
     if ( format == "tree" ) {
@@ -132,7 +139,7 @@ function createNode( x, y, z, i, format ) {
         createTextMesh( i,         x, y, z, i,     'arryNums' );
     }
 
-    return node;
+    return nodeMesh;
 
 }
 
@@ -167,8 +174,8 @@ function createTextMesh( num, x, y, z, i, format ) {
 
     // set the position of the text
     textGeo.computeBoundingBox();
-    const textCenter    = textGeo.boundingBox.getCenter( new THREE.Vector3() );
-    const textY         = format == "arryNums" ? y - textCenter.y * 3 : y - textCenter.y;
+    const textCenter = textGeo.boundingBox.getCenter( new THREE.Vector3() );
+    const textY      = format == "arryNums" ? y - textCenter.y * 3 : y - textCenter.y;
     textMesh.position.set( x - textCenter.x, textY, z + TXT_DELTA_Z );
     
     // metadata
@@ -186,18 +193,20 @@ async function wait(scale=1) {
 
 }
 
-async function setColor ( i, color, pause = false, scale = 1 ) {
+async function setColor ( i, color, slow = false, scale = 1 ) {
 
+    if ( ALGO_STATUS === "paused" ) await pause();
     TREE_NODES[ i - 1 ].material.color.set( color );
     ARRY_NODES[ i ].material.color.set( color );
-    if ( pause ) await wait( scale );
+    if ( slow ) await wait( scale );
 
 }
 
-async function setColors( is, color, pause = false, scale = 1 ) {
+async function setColors( is, color, slow = false, scale = 1 ) {
 
+    if ( ALGO_STATUS === "paused" ) await pause();
     is.forEach( i => setColor( i, color ) );
-    if ( pause ) await wait( scale );
+    if ( slow ) await wait( scale );
 
 }
 
@@ -208,12 +217,12 @@ var LINES      = [];
 
 function initHeap() {
 
-    BOX_DIM      = DEFAULT_BOX_DIM;
+    BOX_DIM      = DEF_BOX_DIM;
     let spaceX   = BOX_DIM * 0.05;
     let aryWidth = HEAP_SIZE * (BOX_DIM + spaceX);
 
     // shrink the box size and spaceX if the arry is too big.
-    if (aryWidth > MAX_ARRY_WIDTH) {
+    if ( aryWidth > MAX_ARRY_WIDTH ) {
         BOX_DIM   = MAX_ARRY_WIDTH / HEAP_SIZE;
         spaceX    = BOX_DIM * 0.05;
         aryWidth  = HEAP_SIZE * (BOX_DIM + spaceX);
@@ -336,7 +345,7 @@ async function swap( childIdx, parenIdx, quiet = false, pc = true ) {
     
     if ( pc ) SWAPS.push( indices );
 
-    if ( !quiet && pc) await setColors( [ childIdx, parenIdx ], RED, true );
+    if ( !quiet && pc ) await setColors( [ childIdx, parenIdx ], RED, true );
 
     const numChild = HEAP[ childIdx ];
     const numParen = HEAP[ parenIdx ];
@@ -372,18 +381,44 @@ async function swap( childIdx, parenIdx, quiet = false, pc = true ) {
     HEAP[ childIdx ] = numParen;
     HEAP[ parenIdx ] = numChild;       
     
-    if ( !quiet && pc ) await setColor( parenIdx, GREEN, true, .75 );
+    // if ( !quiet && pc ) await setColor( parenIdx, GREEN, true, .75 );
 }
 
-async function reHeapDown( parentIdx, quiet = false ) {
+function cmp( a, b ) {
 
-    if ( parentIdx <= 0 ) return; // root
-    if ( !quiet ) await setColor( parentIdx, PURPLE, true); 
-    await compare(parentIdx, quiet); 
+    return HEAP_TYPE == "min" ? a < b : a > b;
 
 }
 
-async function compare( parIdx, quiet = false ) {
+async function reHeapUp( nodeIdx, quiet = false ) {
+    
+    // root
+    if ( nodeIdx <= 1 ) {
+        if ( !quiet ) await setColor( nodeIdx, GREEN, true ); 
+        return; 
+    }
+    if ( !quiet ) await setColor( nodeIdx, PURPLE, true ); 
+
+    const parIdx = Math.floor( nodeIdx / 2 );
+    if ( !quiet ) await setColors( [ nodeIdx, parIdx ], YELLOW, true );
+
+    const nodeNum = HEAP[ nodeIdx ];
+    const parNum  = HEAP[ parIdx ];
+
+    if ( cmp( nodeNum, parNum ) ) {
+        await swap( nodeIdx, parIdx, quiet );
+        if ( !quiet ) await setColors( [ parIdx, nodeIdx ], GREEN );
+        await reHeapUp( parIdx, quiet );
+    } else {
+        if ( !quiet ) await setColors( [ parIdx, nodeIdx ], GREEN, true );
+    }
+
+}
+
+async function reHeapDown( parIdx, quiet = false ) {
+
+    if ( parIdx <= 0 ) return; // root
+    if ( !quiet ) await setColor( parIdx, PURPLE, true);
 
     const lftIdx = 2 * parIdx;
     const rhtIdx = 2 * parIdx + 1;
@@ -400,13 +435,15 @@ async function compare( parIdx, quiet = false ) {
     
     if ( !quiet ) await setColors( [ parIdx, lftIdx, rhtIdx ], YELLOW, true );
     
-    if ( lftNum < rhtNum && lftNum < parNum ) {
+    if ( cmp( lftNum, rhtNum ) && cmp( lftNum, parNum ) ) {
         if ( !quiet ) setColor( rhtIdx, GREEN );
         await swap( lftIdx, parIdx, quiet );
+        if ( !quiet ) setColor( parIdx, GREEN );
         await reHeapDown( lftIdx, quiet );
-    } else if ( rhtNum < parNum ) {
+    } else if ( cmp( rhtNum, parNum ) ) {
         if ( !quiet ) setColor( lftIdx, GREEN );
         await swap( rhtIdx, parIdx, quiet );
+        if ( !quiet ) setColor( parIdx, GREEN ); 
         await reHeapDown( rhtIdx, quiet );
     } else {
         if ( !quiet ) await setColors( [ parIdx, lftIdx, rhtIdx ], GREEN, true );
@@ -422,25 +459,31 @@ async function pause() {
 
 }
 
-async function buildHeap( quiet=false ) {
+async function buildHeap( quiet = false ) {
     
     SWAPS          = [];
     const origHeap = [ ...HEAP ];
     
-    if ( !quiet ) {
-        const done_node_indices = _.range(Math.floor(HEAP_SIZE / 2) + 1, HEAP_SIZE + 1);
-        await setColors( done_node_indices, PURPLE, true );
-        await setColors( done_node_indices, GREEN, true );
-    }
+    if ( BUILD_STYLE === "bottom-up" ) {
+        if ( !quiet ) {
+            const done_node_indices = _.range(Math.floor(HEAP_SIZE / 2) + 1, HEAP_SIZE + 1);
+            await setColors( done_node_indices, PURPLE, true );
+            await setColors( done_node_indices, GREEN, true );
+        }
 
-    for ( let i = Math.floor(HEAP_SIZE / 2); i > 0; i -= 1 ) {
-        await( reHeapDown(i, quiet) );
-        if ( ALGO_STATUS === "paused" ) await pause();
+        for ( let i = Math.floor( HEAP_SIZE / 2 ); i > 0; i -= 1 ) {
+            await( reHeapDown( i, quiet ) );
+        }
+    } else {
+        for ( let i = 1; i < HEAP_SIZE + 1; i++ ) {
+            await( reHeapUp( i, quiet ) );
+        }
     }
 
     if ( quiet ) HEAP = origHeap;
     ALGO_STATUS = "stopped";
     console.log("done building");
+    if ( !quiet ) START_BUTTON.domElement.click();
 
 }
 
@@ -530,56 +573,96 @@ async function tryBuild() {
 
 }
 
+function toggleButton() {
+
+}
+
 function initGui() {
 
-    const gui = new GUI();
+    const gui = new GUI( { width: 150 } );
     gui.name  = "gui";
 
     const param = {
-        'num levels': 4,
-        'width'     : 5,
-        'text color': TEXT_COLOR,
-        'line color': LINE_COLOR,
-        'node color': NODE_COLOR,
-        'algo speed': 1, 
-        tryBuild    : function() { tryBuild(); },
-        add         : function() { 
+        'num levels'  : 4,
+        'width'       : 5,
+        'text color'  : TEXT_COLOR,
+        'line color'  : LINE_COLOR,
+        'node color'  : NODE_COLOR,
+        'algo speed'  : 1, 
+        'heap type'   : HEAP_TYPE,
+        'build style' : 'bottom-up',
+        'controller'  : 'pc (auto)', 
+        'auto build'  : () => { 
+                                if (ALGO_STATUS === "stopped") {
+                                    ALGO_STATUS = "running";
+                                    buildHeap();
+                                }
+                            }, 
+        build         : () => { 
+                                if ( WHO_BUILDS === "pc" ) {
                                     if (ALGO_STATUS === "stopped") {
                                         ALGO_STATUS = "running";
+                                        START_BUTTON.name('pause');
+                                        START_BUTTON.updateDisplay();
                                         buildHeap();
-                                    }
-                     }, 
-        pauseObj   : function() { 
-                                    if (ALGO_STATUS === "running") {
+                                    }else if (ALGO_STATUS === "running") {
                                         ALGO_STATUS = "paused";
-                                        PAUSE_CONTROLLER.name('resume execution');
-                                        PAUSE_CONTROLLER.updateDisplay();
-                                    } else {
+                                        START_BUTTON.name('resume');
+                                        START_BUTTON.updateDisplay();
+                                    }else if (ALGO_STATUS === "paused") {
                                         ALGO_STATUS = "running";
-                                        PAUSE_CONTROLLER.name('pause  execution');
-                                        PAUSE_CONTROLLER.updateDisplay();
+                                        START_BUTTON.name('pause');
+                                        START_BUTTON.updateDisplay();
                                     }
-            
-                     }
+                                } else {
+                                    tryBuild() 
+                                }
+                            },
+        pauseObj      : () => { 
+                                if (ALGO_STATUS === "running") {
+                                    ALGO_STATUS = "paused";
+                                    START_BUTTON.name('resume');
+                                    START_BUTTON.updateDisplay();
+                                } else {
+                                    ALGO_STATUS = "running";
+                                    START_BUTTON.name('pause');
+                                    START_BUTTON.updateDisplay();
+                                }
+                            }
     };
+
+    gui.add( param, 'heap type', [ 'max', 'min' ] ).onChange( function ( val ) {
+        HEAP_TYPE = val;
+    });
 
     gui.add( param, 'num levels', 2, 6, 1 ).onChange( function ( val ) {
 
         if (NUM_LEVELS == val || ALGO_STATUS !== "stopped" ) return;
         NUM_LEVELS = val;
-        HEAP_SIZE  = Math.pow(2, NUM_LEVELS) - 1;
+        HEAP_SIZE  = Math.pow( 2, NUM_LEVELS ) - 1;
         initHeap();
 
     });
 
-    const colorFolder = gui.addFolder( 'colors' );
+    const who_builds = gui.add( param, 'controller', [ 'pc (auto)', 'you! (manual)' ] )
+    .onChange( val => { 
+                        val == "pc (auto)" ? WHO_BUILDS = "pc" : WHO_BUILDS = "user";
+                        initHeap(); 
+                        } 
+            );
 
+    const pcFolder     = gui.addFolder( 'auto execution settings' );
+    const colorFolder  = gui.addFolder( 'colors' );
+    const buildFolder  = gui.addFolder( 'build heap' );
+
+    const algo_speed = pcFolder.add( param, 'algo speed', 0.01, 4 ).onChange( async v => { ALGO_SPEED = 1 / v; } );
+    
     colorFolder.addColor( param, 'node color' ).onChange( function ( val ) {
 
         if (NODE_COLOR == val) return;
         NODE_COLOR = val;
-        TREE_NODES.forEach(node => node.material.color = new THREE.Color(NODE_COLOR));
-        ARRY_NODES.forEach(node => node.material.color = new THREE.Color(NODE_COLOR));
+        TREE_NODES.forEach( node => node.material.color = new THREE.Color( NODE_COLOR ) );
+        ARRY_NODES.forEach( node => node.material.color = new THREE.Color( NODE_COLOR ) );
 
     });
 
@@ -589,9 +672,8 @@ function initGui() {
         TEXT_COLOR = val;
 
         HEAP.forEach( elem => {
-            for ( let format of [ 'tree', 'arry' ]) {
+            for ( let format of [ 'tree', 'arry' ] ) {
                 const txtMesh = scene.getObjectByName( elem.toString() + '_' + format );
-                if ( txtMesh !== undefined) txtMesh.material[0].color = new THREE.Color(TEXT_COLOR);
             }
         });
 
@@ -599,32 +681,30 @@ function initGui() {
 
     colorFolder.addColor( param, 'line color' ).onChange( function ( val ) {
 
-        if (LINE_COLOR == val) return;
+        if ( LINE_COLOR == val ) return;
         LINE_COLOR = val;
-        LINES.forEach(line => line.material.color = new THREE.Color(LINE_COLOR));
+        LINES.forEach( line => line.material.color = new THREE.Color(  LINE_COLOR ) );
 
     });
 
     colorFolder.close();
+    pcFolder.close();
     
-    const autoFolder = gui.addFolder( 'auto build' );
-    autoFolder.add( param, 'add').name('build heap (bottom-up)');
-
-    PAUSE_CONTROLLER = autoFolder.add(param, 'pauseObj'); 
-    PAUSE_CONTROLLER.name('pause execution');
-
-    autoFolder.add( param, 'algo speed', 0.01, 4).onChange( async function ( val ) { ALGO_SPEED = 1 / val; });
-
-    const manualFolder = gui.addFolder( 'manual build' );
-    let controller     = manualFolder.add( param, 'tryBuild').name('build a heap on your own');
-
+    const build_style = buildFolder.add( param, 'build style', [ 'bottom-up', 'top-down' ] )
+                                   .onChange( val => { 
+                                                       BUILD_STYLE = val; 
+                                                       initHeap(); 
+                                                     } 
+                                            );
+    START_BUTTON = buildFolder.add( param, 'build' ).name( 'build heap!' );
+    
     // Change the button's style when it's clicked
-    controller.domElement.addEventListener('click', function() {
+    START_BUTTON.domElement.addEventListener( 'click', function() {
 
         // Get the actual button element
-        var button    = this.querySelector('.name');
-        let dg        = "#" + new THREE.Color(DARKGREY).getHexString();
-        let currcolor = "#" + new THREE.Color(button.style.backgroundColor).getHexString();
+        var button    = this.querySelector( '.name' );
+        let dg        = "#" + new THREE.Color( DARKGREY ).getHexString();
+        let currcolor = "#" + new THREE.Color( button.style.backgroundColor ).getHexString();
         if ( currcolor === dg ) {
             button.style.backgroundColor = '';  // Not selected
         } else {
