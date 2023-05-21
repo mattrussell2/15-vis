@@ -25,6 +25,8 @@ const DARKGREY = 0x273135;
 const PURPLE   = 0xbaa0f8;
 const BLACK    = 0x000000;
 
+var HEAP_TYPE = "max";
+
 // box positioning constants
 const TREE_ROOT_X     = 0;
 const TREE_ROOT_Y     = 100;
@@ -383,6 +385,12 @@ async function reHeapDown( parentIdx, quiet = false ) {
 
 }
 
+function cmp( a, b ) {
+
+    return HEAP_TYPE == "min" ? a < b : a > b;
+
+}
+
 async function compare( parIdx, quiet = false ) {
 
     const lftIdx = 2 * parIdx;
@@ -400,11 +408,11 @@ async function compare( parIdx, quiet = false ) {
     
     if ( !quiet ) await setColors( [ parIdx, lftIdx, rhtIdx ], YELLOW, true );
     
-    if ( lftNum < rhtNum && lftNum < parNum ) {
+    if ( cmp( lftNum, rhtNum ) && cmp( lftNum, parNum ) ) {
         if ( !quiet ) setColor( rhtIdx, GREEN );
         await swap( lftIdx, parIdx, quiet );
         await reHeapDown( lftIdx, quiet );
-    } else if ( rhtNum < parNum ) {
+    } else if ( cmp( rhtNum, parNum ) ) {
         if ( !quiet ) setColor( lftIdx, GREEN );
         await swap( rhtIdx, parIdx, quiet );
         await reHeapDown( rhtIdx, quiet );
@@ -542,6 +550,7 @@ function initGui() {
         'line color': LINE_COLOR,
         'node color': NODE_COLOR,
         'algo speed': 1, 
+        'heap type' : HEAP_TYPE,
         tryBuild    : function() { tryBuild(); },
         add         : function() { 
                                     if (ALGO_STATUS === "stopped") {
@@ -562,6 +571,10 @@ function initGui() {
             
                      }
     };
+
+    gui.add( param, 'heap type', [ 'max', 'min' ] ).onChange( function ( val ) {
+        HEAP_TYPE = val;
+    });
 
     gui.add( param, 'num levels', 2, 6, 1 ).onChange( function ( val ) {
 
