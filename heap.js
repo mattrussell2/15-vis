@@ -1,7 +1,7 @@
 import * as THREE       from 'three';
-import fontData         from 'three/fonts/droid_sans_mono_regular.typeface.json' assert { type: "json" };
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import { FontLoader }   from 'three/addons/loaders/FontLoader.js';
+import { TTFLoader }    from 'three/addons/loaders/TTFLoader.js'; 
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { Line2 }        from 'three/addons/lines/Line2.js';
@@ -45,8 +45,10 @@ var   ASPECT_RATIO = window.innerWidth / window.innerHeight;
 // array can take up 90% of the screen max
 var MAX_ARRY_WIDTH = FRUSTUM_SIZE * ASPECT_RATIO * 0.9;
 
-// font used to display text
-const FONT = new FontLoader().parse( fontData );
+
+const ttf        = await new TTFLoader().loadAsync('./JetBrainsMono-Light.ttf');
+const fontloader = new FontLoader();
+const FONT       = fontloader.parse(ttf);
 
 var BUILD_START_BUTTON;
 var REMOVE_START_BUTTON;
@@ -165,8 +167,10 @@ function createTextMesh( num, x, y, z, i, format ) {
                                         {
                                             font:   FONT,
                                             size:   tsize,
-                                            height: theight
-                                        } 
+                                            height: theight//, 
+                                            //curveSegments: 60 
+                                        },
+                                        
                                     );
 
     const textMat  = [ 
@@ -238,7 +242,7 @@ function initHeap() {
     const UNDER_ARY_Y = ARRY_Y_POSI - BOX_DIM / 2
 
     // text size changes if the box dim gets smaller
-    TEXT_SIZE         = BOX_DIM / 2;
+    TEXT_SIZE         = BOX_DIM / 2.5;
     TEXT_HEIGHT       = TEXT_SIZE - 1; 
     
     // clear objects from scene
