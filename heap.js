@@ -694,10 +694,11 @@ async function tryRemove() {
     
 }
 
+// back to 'regular speed', but click the button too. 
 async function speedyBuild( quiet = false) {
 
     const orig_algospeed = ALGO_SPEED;
-    ALGO_SPEED /= 3;
+    ALGO_SPEED /= 1;
     BUILD_START_BUTTON.domElement.click();
     await buildHeap( quiet );
     ALGO_SPEED = orig_algospeed;
@@ -707,7 +708,7 @@ async function speedyBuild( quiet = false) {
 async function heapSort() {
 
     HEAPSORTING = true;
-    if ( !HEAP_BUILT ) { await speedyBuild(); }
+    if ( !HEAP_BUILT ) { await buildHeap(); }
     
     const orig_size = HEAP_SIZE;
     const orig_heap = JSON.parse(JSON.stringify(HEAP));
