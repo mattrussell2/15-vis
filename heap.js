@@ -45,7 +45,7 @@ var   ASPECT_RATIO = window.innerWidth / window.innerHeight;
 // array can take up 90% of the screen max
 var MAX_ARRY_WIDTH = FRUSTUM_SIZE * ASPECT_RATIO * 0.9;
 
-
+// load the font. 
 const ttf        = await new TTFLoader().loadAsync('./JetBrainsMono-Light.ttf');
 const fontloader = new FontLoader();
 const FONT       = fontloader.parse(ttf);
