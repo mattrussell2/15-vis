@@ -1,0 +1,9 @@
+{
+    "scripts": {
+        "deploy": "gh-pages -d heap",
+        "homepage": "https://mattrussell2.github.io/data-structures-vis"
+    },
+    "dependencies": {
+        "gh-pages": "^5.0.0"
+    }
+}
