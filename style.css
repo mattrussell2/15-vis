@@ -50,8 +50,9 @@ canvas {
 
 #orientation-message {
   position: absolute;
-  bottom: 20px;
+  bottom: -80px;
   background-color: #fe6d7e;
   padding: 10px;
+  font-size: 40px;
   border-radius: 5px;
 }
