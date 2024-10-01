@@ -874,7 +874,8 @@ function initGui() {
 
 
 await showLoading();
-await new Promise(resolve => setTimeout(resolve, 1000));
+let loadTime = isPortrait() ? 3500 : 1000;
+await new Promise(resolve => setTimeout(resolve, loadTime));
 initGui();
 initHeap();
 hideLoading();
