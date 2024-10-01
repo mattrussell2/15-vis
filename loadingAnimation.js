@@ -8,7 +8,7 @@ function initLoadingAnimation() {
     // Get the loading div dimensions
     const loadingDiv = document.getElementById('loading');
     const width = loadingDiv.clientWidth;
-    const height = loadingDiv.clientHeight;
+    const height = loadingDiv.clientHeight * 0.7; // Match the 70% height from CSS
     
     // Use the correct aspect ratio
     loadingCamera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
@@ -47,28 +47,47 @@ function animateLoading() {
     loadingRenderer.render(loadingScene, loadingCamera);
 }
 
+function isMobile() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
+
+function isPortrait() {
+    return window.innerHeight > window.innerWidth;
+}
+
 export function showLoading() {
-    if (!loadingScene) {
-        initLoadingAnimation();
-        animateLoading();
-    }
-    document.getElementById('loading').style.display = 'flex';
+    return new Promise((resolve) => {
+        if (!loadingScene) {
+            initLoadingAnimation();
+        }
+        document.getElementById('loading').style.display = 'flex';
+        
+        const loadingMessage = document.getElementById('loading-message');
+        const orientationMessage = document.getElementById('orientation-message');
+        
+        if (isMobile() && isPortrait()) {
+            loadingMessage.style.display = 'none';
+            orientationMessage.style.display = 'block';
+        } else {
+            loadingMessage.style.display = 'block';
+            orientationMessage.style.display = 'none';
+        }
+
+        requestAnimationFrame(() => {
+            animateLoading();
+            resolve();
+        });
+    });
 }
 
 export function hideLoading() {
     document.getElementById('loading').style.display = 'none';
 }
 
-// Add window resize handler
-window.addEventListener('resize', onWindowResize, false);
+// Add orientation change listener
+window.addEventListener('orientationchange', () => {
+    if (document.getElementById('loading').style.display !== 'none') {
+        showLoading();
+    }
+});
 
-function onWindowResize() {
-    const loadingDiv = document.getElementById('loading');
-    const width = loadingDiv.clientWidth;
-    const height = loadingDiv.clientHeight;
-
-    loadingCamera.aspect = width / height;
-    loadingCamera.updateProjectionMatrix();
-
-    loadingRenderer.setSize(width, height);
-}
