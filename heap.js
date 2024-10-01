@@ -9,6 +9,8 @@ import { GUI }          from 'three/addons/libs/lil-gui.module.min.js';
 import { Interaction }  from './three.interaction.js/src/index.js';
 import { TWEEN }        from 'tween';
 import _                from 'underscore';
+import { showLoading, hideLoading } from './loadingAnimation.js';
+
 
 // 'min' or 'max'
 var HEAP_TYPE   = "max";
@@ -225,7 +227,9 @@ var TREE_NODES = [];
 var ARRY_NODES = [];
 var LINES      = [];
 
-function initHeap() {
+async function initHeap() {
+
+    showLoading();
 
     BOX_DIM      = DEF_BOX_DIM;
     let spaceX   = BOX_DIM * 0.05;
@@ -308,6 +312,7 @@ function initHeap() {
 
     iterNodes( ( node ) => { makeClicky( node ) } );
     
+    hideLoading();
 }
 
 // given two points, return a point that is d along a vector perpendicular to the line formed by the original two points
@@ -853,7 +858,7 @@ function initGui() {
 }
 
 initGui();
-initHeap();
+await initHeap();
 
 // Render the scene
 function render() {
