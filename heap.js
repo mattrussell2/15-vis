@@ -9,6 +9,8 @@ import { GUI }          from 'three/addons/libs/lil-gui.module.min.js';
 import { Interaction }  from './three.interaction.js/src/index.js';
 import { TWEEN }        from 'tween';
 import _                from 'underscore';
+import { showLoading, hideLoading } from './loadingAnimation.js';
+
 
 // 'min' or 'max'
 var HEAP_TYPE   = "max";
@@ -852,8 +854,12 @@ function initGui() {
     HEAPSORT_START_BUTTON.domElement.addEventListener( 'click', colorButton );
 }
 
+
+await showLoading();
+await new Promise(resolve => setTimeout(resolve, 1000));
 initGui();
 initHeap();
+hideLoading();
 
 // Render the scene
 function render() {
