@@ -1,9 +1,0 @@
-node_modules/**
-build/**
-esm/**
-static/**
-examples/**
-docs/**
-test/**
-rollup.config.js
-karma.conf.js
