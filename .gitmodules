@@ -1,6 +1,3 @@
 [submodule "heap/three.interaction.js"]
 	path = heap/three.interaction.js
 	url = git@github.com:mattrussell2/three.interaction.js
-[submodule "heap/heap/three.interaction.js"]
-	path = heap/heap/three.interaction.js
-	url = git@github.com:mattrussell2/three.interaction.js
