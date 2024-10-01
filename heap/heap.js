@@ -57,6 +57,10 @@ var BUILD_START_BUTTON;
 var REMOVE_START_BUTTON;
 var HEAPSORT_START_BUTTON;
 
+function isPortrait() {
+    return window.innerHeight > window.innerWidth;
+}
+
 function reset_camera() {
 
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -888,4 +892,7 @@ render();
 
 window.addEventListener('resize', () => {
     reset_camera();
+    if (document.getElementById('loading').style.display !== 'none') {
+        showLoading();
+    }
 });
