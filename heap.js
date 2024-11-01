@@ -57,6 +57,10 @@ var BUILD_START_BUTTON;
 var REMOVE_START_BUTTON;
 var HEAPSORT_START_BUTTON;
 
+function isPortrait() {
+    return window.innerHeight > window.innerWidth;
+}
+
 function reset_camera() {
 
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -105,6 +109,7 @@ var LINE_COLOR  = BLUE;
 var TEXT_COLOR  = DARKGREY;
 var ALGO_SPEED  = 1;
 var ALGO_STATUS = 'stopped';
+var USER_PAUSED = false; 
 
 // these will change dependent on the above params
 var BOX_DIM     = DEF_BOX_DIM;
@@ -118,6 +123,16 @@ var PAUSE_CONTROLLER;
 // SWAP_IDX is where the user currently is in the swap list. 
 var SWAPS    = [];
 var SWAP_IDX = 0;
+
+function handleVisibilityChange() {
+    if (document.hidden && ALGO_STATUS === "running") {
+        ALGO_STATUS = "paused";
+    }
+    if (!document.hidden && ALGO_STATUS === "paused" && !USER_PAUSED) {
+        ALGO_STATUS = "running";
+    }
+}
+document.addEventListener("visibilitychange", handleVisibilityChange);
 
 
 function createNode( x, y, z, i, format ) {
@@ -778,14 +793,17 @@ function runFunc( pcFunc, userFunc, button  ) {
             button.name('pause');
             button.updateDisplay();
             pcFunc();
+            USER_PAUSED = false;
         }else if (ALGO_STATUS === "running") {
             ALGO_STATUS = "paused";
             button.name('resume');
             button.updateDisplay();
+            USER_PAUSED = true;
         }else if (ALGO_STATUS === "paused") {
             ALGO_STATUS = "running";
             button.name('pause');
             button.updateDisplay();
+            USER_PAUSED = false;
         }
     } else {
         userFunc();
@@ -857,8 +875,13 @@ function initGui() {
     HEAPSORT_START_BUTTON.domElement.addEventListener( 'click', colorButton );
 }
 
+
+await showLoading();
+let loadTime = isPortrait() ? 3500 : 1000;
+await new Promise(resolve => setTimeout(resolve, loadTime));
 initGui();
-await initHeap();
+initHeap();
+hideLoading();
 
 // Render the scene
 function render() {
@@ -873,4 +896,7 @@ render();
 
 window.addEventListener('resize', () => {
     reset_camera();
+    if (document.getElementById('loading').style.display !== 'none') {
+        showLoading();
+    }
 });
