@@ -242,9 +242,7 @@ var TREE_NODES = [];
 var ARRY_NODES = [];
 var LINES      = [];
 
-async function initHeap() {
-
-    showLoading();
+function initHeap() {
 
     BOX_DIM      = DEF_BOX_DIM;
     let spaceX   = BOX_DIM * 0.05;
@@ -327,7 +325,6 @@ async function initHeap() {
 
     iterNodes( ( node ) => { makeClicky( node ) } );
     
-    hideLoading();
 }
 
 // given two points, return a point that is d along a vector perpendicular to the line formed by the original two points
