@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>three.js webgl</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+<link type="text/css" rel="stylesheet" href="main.css">
+<style>
+	body {
+		background-color: #f0f0f0;
+		color: #444;
+	}
+	a {
+		color: #08f;
+	}
+</style>
+<meta name="description" content="_" />
+<meta name="title" property="og:title" content="_" />
+<meta property="og:type" content="_" />
+<meta name="image" property="og:image" content="./ll_screenshot.jpg" />
+<meta name="description" property="og:description" content="three.js visualization of a singly linked list for COMP15 students." /><meta name="author" content="_" />
+</head>
+<body>
+
+<div id="info" style="justify-content: center;">
+	<p>
+<a href="https://threejs.org">three.js</a> </br>
+illustration of a singly linked list of characters</br>
+use arrow keys / right mouse button to pan - use left mouse button to rotate - use mouse wheel to zoom
+</p>
+<button id="pushAtBack">pushAtBack</button>
+<!--<button id="toggleArrows">toggleArrows</button>-->
+</div>
+
+<script type="module">
+
+import * as THREE from './three.module.js';	
+import * as ORBIT from './OrbitControls.js';		
+
+var arrows = []; 
+
+let container;
+let camera, scene, raycaster, renderer;
+
+let INTERSECTED;
+let theta = 0;
+var node_val = 0;
+
+var FONT; 
+var mouse, controls; 
+
+var fontloader = new THREE.FontLoader();								
+fontloader.load('./helvetiker_regular.typeface.json', function(font){				
+	FONT = font; 
+	init();
+})
+
+function init(){
+
+	mouse = new THREE.Vector2();			
+
+	container = document.createElement( 'div' );
+
+	document.body.appendChild( container );
+
+	camera = new THREE.PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 1, 10000 );
+
+	scene = new THREE.Scene();
+	scene.background = new THREE.Color( 0x000000 );
+
+	camera.position.x = 0; 
+	camera.position.y = 0; 
+	camera.position.z = 50;
+	camera.lookAt( scene.position );
+
+	const light1 = new THREE.DirectionalLight( 0xffffff, 0.5 );
+	light1.position.set( -1, 0, 1 );
+	scene.add( light1 );
+
+	const light2 = new THREE.DirectionalLight( 0xffffff, 0.5 );
+	light2.position.set( 1, 0, 1 );
+	scene.add( light2 );
+
+	raycaster = new THREE.Raycaster();
+
+	renderer = new THREE.WebGLRenderer();
+	renderer.setPixelRatio( window.devicePixelRatio );
+	renderer.setSize( window.innerWidth, window.innerHeight );
+	container.appendChild( renderer.domElement );
+	
+	controls = new ORBIT.OrbitControls(camera, renderer.domElement); 
+	controls.listenToKeyEvents(renderer.domElement);
+	document.addEventListener( 'mousemove', onDocumentMouseMove );
+	window.addEventListener( 'resize', onWindowResize );
+			
+	initLL(); 
+
+	animate();
+}
+
+// invert color components
+function invertColor(rgb) {
+	var r = 1 - rgb.r,
+		g = 1 - rgb.g,
+		b = 1 - rgb.b;
+	return new THREE.Color( r, g, b );
+}
+
+class LinkedList {
+
+	constructor() {
+		this.phrase = "hello world! Wow! You made it this far! Nice work! Get ready for undefined coming soon!"; 
+
+		this.start_pos = new THREE.Vector3(-30, 0, 0);
+
+		this.curr_pos = new THREE.Vector3(-30, 0, 0);
+
+		this.cube_distance  = 25;
+		this.cube_size      = this.cube_distance - 5;
+		this.ptr_cube_size  = this.cube_size / 5;
+		this.ptr_y_offset   = this.ptr_cube_size;
+		this.data_cube_size = this.cube_size / 5;
+		this.data_y_offset  = this.ptr_cube_size;
+		this.LLBox_size     = this.cube_size; 
+
+		this.num_nodes = 0;
+		
+		this.nullptrMesh = "none";	
+
+		this.LLBox();	
+	}
+
+	set_nullptr(){
+		if (this.nullptrMesh == "none"){
+			let nullptrGeo, nullptrMaterial;
+			nullptrGeo = new THREE.TextGeometry("nullptr", {
+				font: FONT,
+				size: 1,
+				height: 0.2,
+				curveSegments: 21,
+				bevelEnabled: false
+			});
+			nullptrMaterial             = new THREE.MeshPhongMaterial( { color: 0xffffff } );
+			this.nullptrMesh            = new THREE.Mesh( nullptrGeo, nullptrMaterial );
+			this.nullptrMesh.position.x = this.curr_pos.x - this.cube_size / 2; 
+			this.nullptrMesh.position.y = this.curr_pos.y - this.ptr_y_offset - 0.5; 
+			this.nullptrMesh.position.z = this.curr_pos.z; 
+			scene.add(this.nullptrMesh);
+		}
+		else{
+			this.nullptrMesh.position.x = this.curr_pos.x - this.cube_size / 2; 
+		}
+	}
+
+	add_arrow(color){
+		// ptr arrow
+		const dir  = new THREE.Vector3(1, 0, 0);
+		
+		let origin = new THREE.Vector3();						
+		origin.x   = this.curr_pos.x;
+		origin.y   = this.curr_pos.y - this.ptr_y_offset;
+		origin.z   = this.curr_pos.z; 
+			
+		let len = this.cube_distance - this.cube_size / 2; 
+		
+		const headlen = 1.5;
+		const headwidth  = 1.5;
+		
+		var ArrowMesh = new THREE.ArrowHelper( 
+											    dir,
+											    origin,
+												len, 
+												color, 
+												headlen,
+												headwidth
+											);	
+
+		scene.add( ArrowMesh );
+	}
+
+	set_size_text(){
+		let mesh_obj = scene.getObjectByName("size_text_mesh")
+		if (mesh_obj != undefined){
+			scene.remove(mesh_obj);
+		}
+	//text of the size itself
+	let SizeTextGeo, SizeTextMaterial;
+		SizeTextGeo = new THREE.TextGeometry(this.num_nodes.toString(), {
+			font: FONT,
+			size: 1,
+			height: 0.2,
+			curveSegments: 21,
+			bevelEnabled: false
+		});
+		SizeTextMaterial              = new THREE.MeshPhongMaterial( { color: 0xffffff} );
+		this.SizeTextMesh             = new THREE.Mesh( SizeTextGeo, SizeTextMaterial );
+		this.SizeTextMesh.position.x  = -30 - 0.5; 
+		this.SizeTextMesh.position.y  = this.start_pos.y + this.data_y_offset; 
+		this.SizeTextMesh.position.z  = this.start_pos.z; 
+		this.SizeTextMesh.renderOrder = 0;
+		this.SizeTextMesh.name        = "size_text_mesh";
+
+		scene.add( this.SizeTextMesh );
+	}
+
+	LLBox(){
+
+		// LL Box
+		let LLBoxGeo, LLBoxOpt, LLBoxMaterial, LLBoxMesh;		
+		LLBoxGeo = new THREE.BoxGeometry( this.LLBox_size, this.LLBox_size * 2, this.LLBox_size );
+		LLBoxOpt = {
+						color: 0x76c4eb,
+						opacity: 0.5,
+						transparent: true
+					};
+		LLBoxMaterial         = new THREE.MeshLambertMaterial( LLBoxOpt ); 
+		LLBoxMesh             = new THREE.Mesh( LLBoxGeo, LLBoxMaterial );  
+		LLBoxMesh.position.x  = this.start_pos.x;
+		LLBoxMesh.position.y  = this.start_pos.y;
+		LLBoxMesh.position.z  = this.start_pos.z;
+		LLBoxMesh.renderOrder = 3;
+		scene.add( LLBoxMesh );
+
+		// "LinkedList" text above the LL box
+		let LLTextGeo, LLTextMaterial, LLTextMesh;
+		LLTextGeo = new THREE.TextGeometry("LinkedList", {
+			font: FONT,
+			size: 1,
+			height: 0.1,
+			curveSegments: 21,
+			bevelEnabled: false
+		});
+		LLTextMaterial         = new THREE.MeshPhongMaterial( { color: LLBoxOpt.color } );
+		LLTextMesh             = new THREE.Mesh( LLTextGeo, LLTextMaterial );
+		LLTextMesh.position.x  = this.start_pos.x - this.cube_size / 2; 
+		LLTextMesh.position.y  = this.start_pos.y + LLBoxGeo.parameters.height / 2; 
+		LLTextMesh.position.z  = this.start_pos.z + LLBoxGeo.parameters.width / 2; 
+		LLTextMesh.renderOrder = 0;
+		scene.add( LLTextMesh );
+
+		// Private data member cube
+		let PrivateCubeGeo, PrivateCubeOpt, PrivateCubeMaterial, PrivateCubeMesh;
+		PrivateCubeGeo = new THREE.BoxGeometry( this.cube_size / 2, this.cube_size, this.cube_size / 2 );
+		PrivateCubeOpt = { 
+						color: 0xff0000,
+						opacity: 0.25,
+						transparent: true
+					};
+		PrivateCubeMaterial         = new THREE.MeshLambertMaterial( PrivateCubeOpt );
+		PrivateCubeMesh             = new THREE.Mesh( PrivateCubeGeo, PrivateCubeMaterial );						
+		PrivateCubeMesh.position.x  = this.start_pos.x;
+		PrivateCubeMesh.position.y  = this.start_pos.y;
+		PrivateCubeMesh.position.z  = this.start_pos.z;
+		PrivateCubeMesh.renderOrder = 2;
+		scene.add( PrivateCubeMesh );
+
+		// "Private" text above the Private box
+		let PrivateTextGeo, PrivateTextMaterial, PrivateTextMesh;
+		PrivateTextGeo = new THREE.TextGeometry("Private", {
+			font: FONT,
+			size: 0.6,
+			height: 0.1,
+			curveSegments: 21,
+			bevelEnabled: false
+		});
+		PrivateTextMaterial         = new THREE.MeshPhongMaterial( { color: PrivateCubeOpt.color } );
+		PrivateTextMesh             = new THREE.Mesh( PrivateTextGeo, PrivateTextMaterial );
+		PrivateTextMesh.position.x  = this.start_pos.x - PrivateCubeGeo.parameters.width / 2; 
+		PrivateTextMesh.position.y  = this.start_pos.y + PrivateCubeGeo.parameters.height / 2; 
+		PrivateTextMesh.position.z  = this.start_pos.z + PrivateCubeGeo.parameters.width / 2; 
+		PrivateTextMesh.renderOrder = 0;
+		scene.add( PrivateTextMesh );
+			
+		// data cube
+		let DataCubeGeo, DataCubeOpt, DataCubeMaterial, DataCubeMesh;
+		DataCubeGeo = new THREE.BoxGeometry( this.data_cube_size, this.data_cube_size, this.data_cube_size );
+		DataCubeOpt = {
+						color: Math.random() * 0xffffff,
+						opacity: 0.5,
+						transparent: true
+					};
+		DataCubeMaterial         = new THREE.MeshLambertMaterial( DataCubeOpt ); 
+		DataCubeMesh             = new THREE.Mesh( DataCubeGeo, DataCubeMaterial ); 
+		DataCubeMesh.position.x  = this.start_pos.x;
+		DataCubeMesh.position.y  = this.start_pos.y + this.data_y_offset;
+		DataCubeMesh.position.z  = this.start_pos.z;
+		DataCubeMesh.renderOrder = 1;
+		scene.add( DataCubeMesh );
+
+		// "int size" text above the Data box
+		let DataTextGeo, DataTextMaterial, DataTextMesh;
+		DataTextGeo = new THREE.TextGeometry("int size", {
+			font: FONT,
+			size: 0.6,
+			height: 0.1,
+			curveSegments: 21,
+			bevelEnabled: false
+		});
+		DataTextMaterial         = new THREE.MeshPhongMaterial( { color: DataCubeOpt.color } );
+		DataTextMesh             = new THREE.Mesh( DataTextGeo, DataTextMaterial );
+		DataTextMesh.position.x  = this.start_pos.x - this.data_cube_size / 2; 
+		DataTextMesh.position.y  = this.start_pos.y + this.data_y_offset + DataCubeGeo.parameters.height / 2; 
+		DataTextMesh.position.z  = this.start_pos.z + DataCubeGeo.parameters.width / 2; 
+		DataTextMesh.renderOrder = 0;
+		scene.add( DataTextMesh );
+
+		// pointer cube
+		let PtrCubeGeo, PtrCubeOpt, PtrCubeMaterial, PtrCubeMesh;				
+		PtrCubeGeo = new THREE.BoxGeometry( this.ptr_cube_size, this.ptr_cube_size, this.ptr_cube_size );
+		PtrCubeOpt = {
+						color: Math.random() * 0xffffff,
+						opacity: 0.0,
+						transparent: false
+					};
+		PtrCubeMaterial         = new THREE.MeshLambertMaterial( PtrCubeOpt ); 
+		PtrCubeMesh             = new THREE.Mesh( PtrCubeGeo, PtrCubeMaterial );  
+		PtrCubeMesh.position.x  = this.start_pos.x;
+		PtrCubeMesh.position.y  = this.start_pos.y - this.ptr_y_offset;
+		PtrCubeMesh.position.z  = this.start_pos.z;
+		PtrCubeMesh.renderOrder = 1;
+		scene.add ( PtrCubeMesh );
+
+		// "Node *" text above the ptr box
+		let PtrTextGeo, PtrTextMaterial, PtrTextMesh;
+		PtrTextGeo = new THREE.TextGeometry("Node *head", {
+			font: FONT,
+			size: 0.6,
+			height: 0.1,
+			curveSegments: 21,
+			bevelEnabled: false
+		});
+		PtrTextMaterial        = new THREE.MeshPhongMaterial( { color: PtrCubeOpt.color } );
+		PtrTextMesh            = new THREE.Mesh( PtrTextGeo, PtrTextMaterial );
+		PtrTextMesh.position.x = this.start_pos.x - this.ptr_cube_size / 2; 
+		PtrTextMesh.position.y = this.start_pos.y - this.ptr_y_offset + PtrCubeGeo.parameters.height / 2; 
+		PtrTextMesh.position.z = this.start_pos.z + PtrCubeGeo.parameters.width / 2; 
+		PtrTextMesh.renderOrder = 1;
+		scene.add( PtrTextMesh );
+
+		this.add_arrow(PtrCubeOpt.color);
+
+		this.curr_pos.x += this.cube_distance;
+		
+		this.set_nullptr();
+		this.set_size_text();
+	}
+
+	node_focus(offset){			
+		let start_location, dir_vec;
+		start_location = new THREE.Vector3();
+		start_location.x = this.start_pos.x;
+		start_location.y = this.start_pos.y - this.ptr_y_offset;
+		start_location.z = this.start_pos.z;
+		
+		dir_vec = new THREE.Vector3();
+		dir_vec.x = 0;
+		dir_vec.y = 0;
+		dir_vec.z = 1;
+
+		start_location.x += offset;
+		raycaster.set(start_location, dir_vec);	
+	}
+
+	sleep(ms) {
+  		return new Promise(resolve => setTimeout(resolve, ms));
+	}
+
+	async add_cube() {					
+		
+		//material.color.setHex(INTERSECTED.currentHex);		
+		//scene.children			
+		let offset = 0;					
+		let i = 0;
+		while(i <= this.num_nodes + 1){						
+			this.node_focus(offset);
+			offset = this.cube_distance * i;											
+			i += 1;
+			await this.sleep(500);	
+		}
+		raycaster.set(new THREE.Vector3(-100, 0, 0), new THREE.Vector3(-1, 0, 0));
+
+		// node cube
+		let NodeCubeGeo, NodeCubeOpt, NodeCubeMaterial, NodeCubeMesh;
+		NodeCubeGeo = new THREE.BoxGeometry( this.cube_size, this.cube_size, this.cube_size );
+		NodeCubeOpt = { 
+						color: Math.random() * 0xffffff,
+						opacity: 0.25,
+						transparent: true
+					};
+		NodeCubeMaterial         = new THREE.MeshLambertMaterial( NodeCubeOpt );
+		NodeCubeMesh             = new THREE.Mesh( NodeCubeGeo, NodeCubeMaterial );						
+		NodeCubeMesh.position.x  = this.curr_pos.x;
+		NodeCubeMesh.position.y  = this.curr_pos.y;
+		NodeCubeMesh.position.z  = this.curr_pos.z;
+		NodeCubeMesh.renderOrder = 3;
+		scene.add( NodeCubeMesh );
+
+		// "Node" text above the large boxes
+		let NodeTextGeo, NodeTextMaterial, NodeTextMesh;
+		NodeTextGeo = new THREE.TextGeometry("Node", {
+			font: FONT,
+			size: 1,
+			height: 0.1,
+			curveSegments: 21,
+			bevelEnabled: false
+		});
+		NodeTextMaterial        = new THREE.MeshPhongMaterial( { color: NodeCubeOpt.color } );
+		NodeTextMesh            = new THREE.Mesh( NodeTextGeo, NodeTextMaterial );
+		NodeTextMesh.position.x = this.curr_pos.x - this.cube_size / 2; 
+		NodeTextMesh.position.y = this.curr_pos.y + NodeCubeGeo.parameters.height / 2; 
+		NodeTextMesh.position.z = this.curr_pos.z + NodeCubeGeo.parameters.width / 2; 
+		scene.add( NodeTextMesh );
+
+		// pointer cube
+		let PtrCubeGeo, PtrCubeOpt, PtrCubeMaterial, PtrCubeMesh;				
+		PtrCubeGeo = new THREE.BoxGeometry( this.ptr_cube_size, this.ptr_cube_size, this.ptr_cube_size );
+		PtrCubeOpt = {
+						color: invertColor(NodeCubeMesh.material.color),
+						opacity: 0.0,
+						transparent: false
+					};
+		PtrCubeMaterial        = new THREE.MeshLambertMaterial( PtrCubeOpt ); 
+		PtrCubeMesh            = new THREE.Mesh( PtrCubeGeo, PtrCubeMaterial );  
+		PtrCubeMesh.position.x = this.curr_pos.x;
+		PtrCubeMesh.position.y = this.curr_pos.y - this.ptr_y_offset;
+		PtrCubeMesh.position.z = this.curr_pos.z;
+		scene.add( PtrCubeMesh );
+
+			// "Node *" text above the ptr box
+			let PtrTextGeo, PtrTextMaterial, PtrTextMesh;
+		PtrTextGeo = new THREE.TextGeometry("Node *next", {
+			font: FONT,
+			size: 0.6,
+			height: 0.1,
+			curveSegments: 21,
+			bevelEnabled: false
+		});
+		PtrTextMaterial        = new THREE.MeshPhongMaterial( { color: PtrCubeOpt.color } );
+		PtrTextMesh            = new THREE.Mesh( PtrTextGeo, PtrTextMaterial );
+		PtrTextMesh.position.x = this.curr_pos.x - this.ptr_cube_size / 2; 
+		PtrTextMesh.position.y = this.curr_pos.y - this.ptr_y_offset + PtrCubeGeo.parameters.width / 2; 
+		PtrTextMesh.position.z = this.curr_pos.z + PtrCubeGeo.parameters.width / 2; 
+		scene.add( PtrTextMesh );
+
+		// data cube
+		let DataCubeGeo, DataCubeOpt, DataCubeMaterial, DataCubeMesh;
+		DataCubeGeo = new THREE.BoxGeometry( this.data_cube_size, this.data_cube_size, this.data_cube_size );
+		DataCubeOpt = {
+						color: Math.random() * 0xffffff,
+						opacity: 0.5,
+						transparent: true
+					};
+		DataCubeMaterial         = new THREE.MeshLambertMaterial( DataCubeOpt ); 
+		DataCubeMesh             = new THREE.Mesh( DataCubeGeo, DataCubeMaterial ); 
+		DataCubeMesh.position.x  = this.curr_pos.x;
+		DataCubeMesh.position.y  = this.curr_pos.y + this.data_y_offset;
+		DataCubeMesh.position.z  = this.curr_pos.z;
+		DataCubeMesh.renderOrder = 2;
+		scene.add( DataCubeMesh );
+			
+		// "Char" text above the Data box
+		let DataTextGeo, DataTextMaterial, DataTextMesh;
+		DataTextGeo = new THREE.TextGeometry("char data", {
+			font: FONT,
+			size: 0.6,
+			height: 0.1,
+			curveSegments: 21,
+			bevelEnabled: false
+		});
+		DataTextMaterial        = new THREE.MeshPhongMaterial( { color: DataCubeOpt.color } );
+		DataTextMesh            = new THREE.Mesh( DataTextGeo, DataTextMaterial );
+		DataTextMesh.position.x = this.curr_pos.x - this.data_cube_size / 2; 
+		DataTextMesh.position.y = this.curr_pos.y + this.data_y_offset + this.data_cube_size / 2; 
+		DataTextMesh.position.z = this.curr_pos.z + this.data_cube_size / 2; 
+		scene.add( DataTextMesh );
+
+		// char text itself
+		let CharTextGeo, CharTextMaterial, CharTextMesh;
+		CharTextGeo = new THREE.TextGeometry("\`" + this.phrase[this.num_nodes] + "\'", {
+			font: FONT,
+			size: 1,
+			height: 0.2,
+			curveSegments: 21,
+			bevelEnabled: false
+		});
+		CharTextMaterial         = new THREE.MeshPhongMaterial( { color: 0xffffff} );
+		CharTextMesh             = new THREE.Mesh( CharTextGeo, CharTextMaterial );
+		CharTextMesh.position.x  = this.curr_pos.x - 0.5; 
+		CharTextMesh.position.y  = this.curr_pos.y + this.data_y_offset; 
+		CharTextMesh.position.z  = this.curr_pos.z; 
+		CharTextMesh.renderOrder = 1;
+		scene.add( CharTextMesh );	
+		
+		this.add_arrow(PtrCubeOpt.color);
+		
+		this.curr_pos.x += this.cube_distance;
+		
+		this.set_nullptr();
+		
+		this.num_nodes += 1;
+		
+		this.set_size_text();
+	}				
+}
+
+function toggleArrows(){
+	let switcher;
+	if (arrows[0].visible == false) {
+		switcher = true;
+	}else {
+		switcher = false;
+	}
+	
+	for (let arrow of arrows){
+		arrow.visible = switcher;
+		
+	}
+}
+			
+function initLL(){
+	var ll = new LinkedList();
+	let button = document.getElementById("pushAtBack");
+	button.onclick = function() { ll.add_cube(); };
+}
+
+function setupArrowToggle(){
+	let button = document.getElementById("toggleArrows");
+	button.onclick = function() { toggleArrows(); };
+}
+
+
+function onWindowResize() {
+	camera.aspect = window.innerWidth / window.innerHeight;
+	camera.updateProjectionMatrix();
+	renderer.setSize( window.innerWidth, window.innerHeight );
+}
+
+function onDocumentMouseMove( event ) {
+	event.preventDefault();
+	mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+	mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+}
+
+
+function animate() {
+	requestAnimationFrame( animate );
+	render();				
+}			
+
+function render() {
+	//raycaster.setFromCamera( mouse, camera );
+
+	const intersects = raycaster.intersectObjects( scene.children, true );				
+	if ( intersects.length > 0 ) {
+
+		if ( INTERSECTED != intersects[ 0 ].object ) {
+			
+			if ( INTERSECTED ) {
+				if (INTERSECTED.parent.type === "ArrowHelper"){		
+					INTERSECTED.parent.children[0].material.color.setHex(INTERSECTED.currentHex);						
+					INTERSECTED.parent.children[1].material.color.setHex(INTERSECTED.currentHex);
+					
+				}	else{
+					INTERSECTED.material.emissive.setHex( INTERSECTED.currentHex );
+				}
+			}
+
+			INTERSECTED = intersects[ 0 ].object;
+			
+			if (INTERSECTED.parent.type === "ArrowHelper"){
+				INTERSECTED.currentHex = INTERSECTED.material.color.getHex();
+				INTERSECTED.parent.children[0].material.color.setHex( 0xff0000 );
+				INTERSECTED.parent.children[1].material.color.setHex( 0xff0000 );
+			}	
+			else{
+				INTERSECTED.currentHex = INTERSECTED.material.emissive.getHex();
+				INTERSECTED.material.emissive.setHex( 0xff0000 );
+			}
+		}
+
+	} else {
+		
+		if ( INTERSECTED ) {
+			if (INTERSECTED.parent.type === "ArrowHelper"){								
+					INTERSECTED.parent.children[0].material.color.setHex( INTERSECTED.currentHex );
+					INTERSECTED.parent.children[1].material.color.setHex( INTERSECTED.currentHex );
+				}	else{
+					INTERSECTED.material.emissive.setHex( INTERSECTED.currentHex );
+			}						
+		}
+
+		INTERSECTED = null;
+
+	}
+	controls.update();	
+	renderer.render( scene, camera );
+	
+}
+
+</script>
+
+	</body>
+</html>
