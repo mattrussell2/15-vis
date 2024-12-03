@@ -1,1 +1,3 @@
 Live demo: https://www.eecs.tufts.edu/~mrussell/linkedlist/linked_list.html
+
+This visualization demonstrates how to conceptualize a Linked List as it is laid out in memory in C++. Enjoy!
